@@ -1,0 +1,165 @@
+<div class="page-header flex items-center justify-between mb-4">
+  <div>
+    <h2 class="font-semibold">Active Schedules</h2>
+    <p class="text-sm text-muted">View computed schedules for a railway line</p>
+  </div>
+  <div class="flex gap-2 items-center">
+    @if (stompConnected()) {
+      <span class="status-badge status-badge--active" title="Receiving live schedule updates">
+        &#x25CF; Live
+        @if (liveUpdateCount() > 0) {
+          ({{ liveUpdateCount() }} update{{ liveUpdateCount() === 1 ? '' : 's' }})
+        }
+      </span>
+    } @else {
+      <span class="status-badge status-badge--draft" title="Not receiving live updates">
+        &#x25CB; Offline
+      </span>
+    }
+    <button class="btn btn-secondary btn-sm" (click)="router.navigate(['/timetables'])">
+      &larr; Timetables
+    </button>
+  </div>
+</div>
+
+<app-error-banner />
+
+<!-- Filter bar -->
+<div class="card mb-4">
+  <div class="flex gap-4 items-end">
+    <div class="form-group" style="flex:1; margin:0">
+      <label class="form-label">Line ID</label>
+      <input
+        class="form-control"
+        [value]="lineId()"
+        (input)="lineId.set($any($event.target).value)"
+        placeholder="e.g. GWR-PAD-BRI"
+      />
+    </div>
+    <div class="form-group" style="flex:1; margin:0">
+      <label class="form-label">Date <span class="text-muted">(optional)</span></label>
+      <input
+        type="date"
+        class="form-control"
+        [value]="date()"
+        (input)="date.set($any($event.target).value)"
+      />
+    </div>
+    <button class="btn btn-primary" (click)="search()" [disabled]="!lineId()">
+      Load Schedules
+    </button>
+  </div>
+</div>
+
+<!-- Timetable-specific schedule view -->
+@if (timetableId() && store.selected(); as sched) {
+  <div class="card mb-4">
+    <h3 class="font-semibold mb-3">Schedule for Timetable {{ sched.timetableId }}</h3>
+    <div class="flex gap-4 text-sm mb-3">
+      <span><strong>Effective:</strong> {{ sched.effectiveDate }}</span>
+      <span><strong>Expiry:</strong> {{ sched.expiryDate ?? 'None' }}</span>
+      <span class="text-muted">Computed: {{ sched.computedAt }}</span>
+    </div>
+    @if (sched.services.length === 0) {
+      <p class="text-muted">No services in this schedule.</p>
+    } @else {
+      @for (service of sched.services; track service.serviceId) {
+        <div class="mb-4">
+          <h4 class="text-sm font-semibold mb-2">Service {{ service.serviceId }}</h4>
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Station</th>
+                <th>Arrival</th>
+                <th>Departure</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (stop of service.stops; track stop.stationCode) {
+                <tr>
+                  <td>{{ stop.stationCode }}</td>
+                  <td>{{ stop.arrivalTime ?? '—' }}</td>
+                  <td>{{ stop.departureTime ?? '—' }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    }
+  </div>
+}
+
+<!-- Active schedules list view -->
+@if (!timetableId()) {
+  @if (store.loading()) {
+    <div class="spinner" role="status" aria-label="Loading schedules"></div>
+  } @else if (store.schedules().length === 0 && lineId()) {
+    <div class="card text-muted">No active schedules found for this line.</div>
+  } @else if (store.schedules().length > 0) {
+    @for (sched of store.schedules(); track sched.id) {
+      <div class="card mb-4">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="font-semibold">{{ sched.lineId }} — {{ sched.effectiveDate }}</h3>
+          <span class="text-sm text-muted">Computed: {{ sched.computedAt }}</span>
+        </div>
+        <div class="flex gap-4 text-sm mb-3">
+          <span><strong>Timetable:</strong>
+            <a
+              (click)="router.navigate(['/schedules'], { queryParams: { timetableId: sched.timetableId } })"
+              style="cursor:pointer; text-decoration:underline"
+            >{{ sched.timetableId }}</a>
+          </span>
+          <span><strong>Expiry:</strong> {{ sched.expiryDate ?? 'None' }}</span>
+          <span><strong>Services:</strong> {{ sched.services.length }}</span>
+        </div>
+        @if (sched.services.length > 0) {
+          @for (service of sched.services; track service.serviceId) {
+            <details class="mb-2">
+              <summary class="text-sm font-semibold" style="cursor:pointer">
+                Service {{ service.serviceId }}
+                ({{ service.stops.length }} stops)
+              </summary>
+              <table class="table mt-2">
+                <thead>
+                  <tr>
+                    <th>Station</th>
+                    <th>Arrival</th>
+                    <th>Departure</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (stop of service.stops; track stop.stationCode) {
+                    <tr>
+                      <td>{{ stop.stationCode }}</td>
+                      <td>{{ stop.arrivalTime ?? '—' }}</td>
+                      <td>{{ stop.departureTime ?? '—' }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </details>
+          }
+        }
+      </div>
+    }
+  }
+}
+
+<!-- Live updates sidebar feed -->
+@if (store.liveUpdates().length > 0) {
+  <div class="card mt-4">
+    <h3 class="font-semibold mb-2 text-sm">Recent Live Updates</h3>
+    <ul style="list-style:none; padding:0; margin:0">
+      @for (upd of store.liveUpdates(); track $index) {
+        <li class="text-sm mb-1" style="padding:4px 0; border-bottom:1px solid var(--color-border)">
+          <span [class]="upd.isEmergency ? 'text-danger' : 'text-muted'">
+            @if (upd.isEmergency) { &#x26A0; EMERGENCY }
+          </span>
+          Line <strong>{{ upd.lineId }}</strong> — {{ upd.effectiveDate }}
+          <span class="text-muted">(timetable: {{ upd.timetableId }})</span>
+        </li>
+      }
+    </ul>
+  </div>
+}

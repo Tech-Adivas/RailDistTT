@@ -1,0 +1,264 @@
+<div class="mb-4">
+  <button class="btn btn-secondary btn-sm" (click)="router.navigate(['/timetables'])">
+    &larr; Back to Timetables
+  </button>
+</div>
+
+<app-error-banner />
+
+@if (store.loading()) {
+  <div class="spinner" role="status" aria-label="Loading timetable"></div>
+} @else if (store.selected(); as t) {
+  <!-- Header -->
+  <div class="page-header flex items-center justify-between mb-4">
+    <div>
+      <h2 class="font-semibold">{{ t.name }}</h2>
+      <p class="text-sm text-muted">{{ t.description }}</p>
+    </div>
+    <div class="flex gap-2 items-center">
+      <app-status-badge [status]="t.status" />
+      @if (stompConnected()) {
+        <span class="status-badge status-badge--active" title="Live updates active">
+          &#x25CF; Live
+          @if (liveUpdateCount() > 0) {
+            ({{ liveUpdateCount() }})
+          }
+        </span>
+      } @else {
+        <span class="status-badge status-badge--draft" title="Not receiving live updates">
+          &#x25CB; Offline
+        </span>
+      }
+    </div>
+  </div>
+
+  <!-- Two-column layout -->
+  <div class="flex gap-4" style="align-items:flex-start">
+
+    <!-- Left: timetable info -->
+    <div class="card" style="flex:2">
+      <h3 class="font-semibold mb-3">Details</h3>
+      <dl class="detail-list">
+        <div class="detail-row">
+          <dt class="text-sm text-muted">ID</dt>
+          <dd class="text-sm" style="font-family:monospace">{{ t.id }}</dd>
+        </div>
+        <div class="detail-row">
+          <dt class="text-sm text-muted">Line</dt>
+          <dd class="text-sm">{{ t.lineId }}</dd>
+        </div>
+        <div class="detail-row">
+          <dt class="text-sm text-muted">Version</dt>
+          <dd class="text-sm">{{ t.version }}</dd>
+        </div>
+        <div class="detail-row">
+          <dt class="text-sm text-muted">Author</dt>
+          <dd class="text-sm">{{ t.authorId }}</dd>
+        </div>
+        <div class="detail-row">
+          <dt class="text-sm text-muted">Reviewer</dt>
+          <dd class="text-sm">{{ t.reviewerId ?? '—' }}</dd>
+        </div>
+        <div class="detail-row">
+          <dt class="text-sm text-muted">Effective Date</dt>
+          <dd class="text-sm">{{ t.effectiveDate }}</dd>
+        </div>
+        <div class="detail-row">
+          <dt class="text-sm text-muted">Expiry Date</dt>
+          <dd class="text-sm">{{ t.expiryDate ?? 'No expiry' }}</dd>
+        </div>
+        <div class="detail-row">
+          <dt class="text-sm text-muted">Status</dt>
+          <dd><app-status-badge [status]="t.status" /></dd>
+        </div>
+      </dl>
+
+      <!-- Schedule link -->
+      <div class="mt-4">
+        <a
+          class="btn btn-secondary btn-sm"
+          (click)="router.navigate(['/schedules'], { queryParams: { timetableId: t.id } })"
+          style="cursor:pointer"
+        >
+          View Schedule &rarr;
+        </a>
+      </div>
+    </div>
+
+    <!-- Right: action panel -->
+    <div class="card" style="flex:1">
+      <h3 class="font-semibold mb-3">Actions</h3>
+
+      <div class="flex flex-col gap-2">
+
+        <!-- DRAFT actions -->
+        @if (t.status === 'DRAFT') {
+          <button
+            class="btn btn-primary"
+            (click)="onSubmit()"
+            [disabled]="store.submitting()"
+          >
+            Submit for Review
+          </button>
+          <button
+            class="btn btn-secondary"
+            (click)="router.navigate(['/timetables', t.id, 'edit'])"
+          >
+            Edit Timetable
+          </button>
+          <button
+            class="btn btn-danger"
+            (click)="onCancel()"
+            [disabled]="store.submitting()"
+          >
+            Cancel
+          </button>
+        }
+
+        <!-- PENDING_REVIEW actions -->
+        @if (t.status === 'PENDING_REVIEW') {
+          <button
+            class="btn btn-success"
+            (click)="onApprove()"
+            [disabled]="store.submitting()"
+          >
+            Approve
+          </button>
+          <button
+            class="btn btn-danger"
+            (click)="showRejectForm.set(true); showRequestChangesForm.set(false)"
+            [disabled]="store.submitting()"
+          >
+            Reject
+          </button>
+          <button
+            class="btn btn-secondary"
+            (click)="showRequestChangesForm.set(true); showRejectForm.set(false)"
+            [disabled]="store.submitting()"
+          >
+            Request Changes
+          </button>
+          <button
+            class="btn btn-danger"
+            (click)="onCancel()"
+            [disabled]="store.submitting()"
+          >
+            Cancel
+          </button>
+        }
+
+        <!-- ACTIVE actions -->
+        @if (t.status === 'ACTIVE') {
+          <button
+            class="btn btn-warning"
+            (click)="showEmergencyForm.set(!showEmergencyForm())"
+            [disabled]="store.submitting()"
+          >
+            Emergency Activate
+          </button>
+        }
+
+        @if (store.submitting()) {
+          <div class="text-sm text-muted">Processing...</div>
+        }
+
+      </div>
+
+      <!-- Reject form -->
+      @if (showRejectForm()) {
+        <div class="mt-4 border-top pt-3">
+          <h4 class="font-semibold text-sm mb-2">Reject Timetable</h4>
+          <div class="form-group">
+            <label class="form-label">Reason <span class="text-danger">*</span></label>
+            <textarea
+              class="form-control"
+              rows="3"
+              [value]="rejectReason()"
+              (input)="rejectReason.set($any($event.target).value)"
+              placeholder="Provide a clear reason for rejection..."
+            ></textarea>
+          </div>
+          <div class="flex gap-2 mt-2">
+            <button
+              class="btn btn-danger btn-sm"
+              (click)="onReject()"
+              [disabled]="!rejectReason().trim() || store.submitting()"
+            >
+              Confirm Reject
+            </button>
+            <button class="btn btn-secondary btn-sm" (click)="showRejectForm.set(false)">
+              Cancel
+            </button>
+          </div>
+        </div>
+      }
+
+      <!-- Request Changes form -->
+      @if (showRequestChangesForm()) {
+        <div class="mt-4 border-top pt-3">
+          <h4 class="font-semibold text-sm mb-2">Request Changes</h4>
+          <div class="form-group">
+            <label class="form-label">Feedback <span class="text-danger">*</span></label>
+            <textarea
+              class="form-control"
+              rows="3"
+              [value]="requestChangesFeedback()"
+              (input)="requestChangesFeedback.set($any($event.target).value)"
+              placeholder="Describe what changes are required..."
+            ></textarea>
+          </div>
+          <div class="flex gap-2 mt-2">
+            <button
+              class="btn btn-primary btn-sm"
+              (click)="onRequestChanges()"
+              [disabled]="!requestChangesFeedback().trim() || store.submitting()"
+            >
+              Send Feedback
+            </button>
+            <button class="btn btn-secondary btn-sm" (click)="showRequestChangesForm.set(false)">
+              Cancel
+            </button>
+          </div>
+        </div>
+      }
+
+      <!-- Emergency Activation form -->
+      @if (showEmergencyForm()) {
+        <div class="mt-4 border-top pt-3">
+          <h4 class="font-semibold text-sm mb-2" style="color:var(--color-warning)">
+            &#x26A0; Emergency Activation
+          </h4>
+          <p class="text-sm text-muted mb-2">
+            This will immediately activate the timetable as an emergency schedule.
+            This action is logged and audited.
+          </p>
+          <div class="form-group">
+            <label class="form-label">Justification <span class="text-danger">*</span></label>
+            <textarea
+              class="form-control"
+              rows="3"
+              [value]="emergencyJustification()"
+              (input)="emergencyJustification.set($any($event.target).value)"
+              placeholder="Provide a justification for emergency activation..."
+            ></textarea>
+          </div>
+          <div class="flex gap-2 mt-2">
+            <button
+              class="btn btn-warning btn-sm"
+              (click)="onEmergencyActivate()"
+              [disabled]="!emergencyJustification().trim() || store.submitting()"
+            >
+              Confirm Emergency Activation
+            </button>
+            <button class="btn btn-secondary btn-sm" (click)="showEmergencyForm.set(false)">
+              Cancel
+            </button>
+          </div>
+        </div>
+      }
+
+    </div>
+  </div>
+} @else if (!store.loading()) {
+  <div class="card text-muted">Timetable not found or could not be loaded.</div>
+}

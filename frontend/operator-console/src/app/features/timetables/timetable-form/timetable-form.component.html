@@ -1,0 +1,160 @@
+<div class="mb-4">
+  <button class="btn btn-secondary btn-sm" (click)="onCancel()">
+    &larr; Back
+  </button>
+</div>
+
+<div class="page-header mb-4">
+  <h2 class="font-semibold">
+    @if (isEditMode()) {
+      Edit Timetable
+    } @else {
+      New Timetable
+    }
+  </h2>
+  <p class="text-sm text-muted">
+    @if (isEditMode()) {
+      Update the timetable details below.
+    } @else {
+      Fill in the details to create a new timetable draft.
+    }
+  </p>
+</div>
+
+<app-error-banner />
+
+@if (store.loading()) {
+  <div class="spinner" role="status" aria-label="Loading"></div>
+} @else {
+  <div class="card" style="max-width:640px">
+    <form (submit)="$event.preventDefault(); onSubmit()">
+
+      <!-- Line ID — read-only in edit mode -->
+      <div class="form-group">
+        <label class="form-label" for="lineId">
+          Line ID <span class="text-danger">*</span>
+        </label>
+        @if (isEditMode()) {
+          <input
+            id="lineId"
+            class="form-control"
+            [value]="lineId()"
+            disabled
+            aria-disabled="true"
+          />
+          <p class="text-sm text-muted">Line ID cannot be changed after creation.</p>
+        } @else {
+          <input
+            id="lineId"
+            class="form-control"
+            [class.is-invalid]="lineIdError()"
+            [value]="lineId()"
+            (input)="lineId.set($any($event.target).value)"
+            placeholder="e.g. GWR-PAD-BRI"
+            autocomplete="off"
+          />
+          @if (lineIdError()) {
+            <div class="invalid-feedback">{{ lineIdError() }}</div>
+          }
+        }
+      </div>
+
+      <!-- Name -->
+      <div class="form-group">
+        <label class="form-label" for="name">
+          Name <span class="text-danger">*</span>
+        </label>
+        <input
+          id="name"
+          class="form-control"
+          [class.is-invalid]="nameError()"
+          [value]="name()"
+          (input)="name.set($any($event.target).value)"
+          placeholder="e.g. Winter 2025 Service"
+          autocomplete="off"
+        />
+        @if (nameError()) {
+          <div class="invalid-feedback">{{ nameError() }}</div>
+        }
+      </div>
+
+      <!-- Description -->
+      <div class="form-group">
+        <label class="form-label" for="description">
+          Description <span class="text-danger">*</span>
+        </label>
+        <textarea
+          id="description"
+          class="form-control"
+          [class.is-invalid]="descriptionError()"
+          rows="3"
+          [value]="description()"
+          (input)="description.set($any($event.target).value)"
+          placeholder="Brief description of this timetable..."
+        ></textarea>
+        @if (descriptionError()) {
+          <div class="invalid-feedback">{{ descriptionError() }}</div>
+        }
+      </div>
+
+      <!-- Effective Date -->
+      <div class="form-group">
+        <label class="form-label" for="effectiveDate">
+          Effective Date <span class="text-danger">*</span>
+        </label>
+        <input
+          id="effectiveDate"
+          type="date"
+          class="form-control"
+          [class.is-invalid]="effectiveDateError()"
+          [value]="effectiveDate()"
+          (input)="effectiveDate.set($any($event.target).value)"
+        />
+        @if (effectiveDateError()) {
+          <div class="invalid-feedback">{{ effectiveDateError() }}</div>
+        }
+      </div>
+
+      <!-- Expiry Date (optional) -->
+      <div class="form-group">
+        <label class="form-label" for="expiryDate">
+          Expiry Date <span class="text-muted">(optional)</span>
+        </label>
+        <input
+          id="expiryDate"
+          type="date"
+          class="form-control"
+          [value]="expiryDate()"
+          (input)="expiryDate.set($any($event.target).value)"
+        />
+        <p class="text-sm text-muted">Leave blank if this timetable has no scheduled expiry.</p>
+      </div>
+
+      <!-- Actions -->
+      <div class="flex gap-2 mt-4">
+        <button
+          type="submit"
+          class="btn btn-primary"
+          [disabled]="store.submitting()"
+        >
+          @if (store.submitting()) {
+            Saving...
+          } @else if (isEditMode()) {
+            Save Changes
+          } @else {
+            Create Timetable
+          }
+        </button>
+        <button
+          type="button"
+          class="btn btn-secondary"
+          (click)="onCancel()"
+          [disabled]="store.submitting()"
+        >
+          Cancel
+        </button>
+      </div>
+
+    </form>
+  </div>
+}

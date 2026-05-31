@@ -1,0 +1,92 @@
+<div class="page-header flex items-center justify-between mb-4">
+  <div>
+    <h2 class="font-semibold">Timetables</h2>
+    <p class="text-sm text-muted">Manage railway timetables across all lines</p>
+  </div>
+  <button class="btn btn-primary" (click)="router.navigate(['/timetables/new'])">
+    + New Timetable
+  </button>
+</div>
+
+<app-error-banner />
+
+<!-- Stats -->
+<div class="flex gap-4 mb-4">
+  <div class="card" style="flex:1; text-align:center">
+    <div class="font-semibold" style="font-size:2rem">{{ store.draftCount() }}</div>
+    <div class="text-sm text-muted">Drafts</div>
+  </div>
+  <div class="card" style="flex:1; text-align:center">
+    <div class="font-semibold" style="font-size:2rem">{{ store.pendingCount() }}</div>
+    <div class="text-sm text-muted">Pending Review</div>
+  </div>
+  <div class="card" style="flex:1; text-align:center">
+    <div class="font-semibold" style="font-size:2rem">{{ store.activeCount() }}</div>
+    <div class="text-sm text-muted">Active</div>
+  </div>
+</div>
+
+<!-- Filter -->
+<div class="card mb-4">
+  <div class="flex gap-4 items-center">
+    <div class="form-group" style="flex:1; margin:0">
+      <label class="form-label">Line ID</label>
+      <input
+        class="form-control"
+        [value]="lineId()"
+        (input)="lineId.set($any($event.target).value)"
+        placeholder="e.g. GWR-PAD-BRI"
+      />
+    </div>
+    <button class="btn btn-primary" (click)="search()" [disabled]="!lineId()">Search</button>
+  </div>
+</div>
+
+<!-- Table -->
+@if (store.loading()) {
+  <div class="spinner" role="status" aria-label="Loading timetables"></div>
+} @else if (store.timetables().length === 0 && lineId()) {
+  <div class="card text-muted">No timetables found for this line.</div>
+} @else if (store.timetables().length > 0) {
+  <div class="card" style="padding:0; overflow:hidden">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Line</th>
+          <th>Name</th>
+          <th>Status</th>
+          <th>Effective Date</th>
+          <th>Author</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (t of store.timetables(); track t.id) {
+          <tr (click)="router.navigate(['/timetables', t.id])" style="cursor:pointer">
+            <td>{{ t.lineId }}</td>
+            <td>{{ t.name }}</td>
+            <td><app-status-badge [status]="t.status" /></td>
+            <td>{{ t.effectiveDate }}</td>
+            <td class="text-sm text-muted">{{ t.authorId }}</td>
+            <td>
+              <button
+                class="btn btn-sm btn-secondary"
+                (click)="$event.stopPropagation(); router.navigate(['/timetables', t.id])"
+              >
+                View
+              </button>
+              @if (t.status === 'DRAFT') {
+                <button
+                  class="btn btn-sm btn-secondary"
+                  (click)="$event.stopPropagation(); router.navigate(['/timetables', t.id, 'edit'])"
+                >
+                  Edit
+                </button>
+              }
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+}
