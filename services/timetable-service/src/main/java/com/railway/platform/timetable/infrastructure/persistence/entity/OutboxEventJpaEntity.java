@@ -54,6 +54,9 @@ public class OutboxEventJpaEntity {
   @Column(name = "created_at", nullable = false, updatable = false)
   private Instant createdAt;
 
+  @Column(name = "relay_published", nullable = false)
+  private boolean relayPublished = false;
+
   @PrePersist
   private void prePersist() {
     createdAt = Instant.now();
@@ -74,4 +77,6 @@ public class OutboxEventJpaEntity {
   public String getCorrelationId() { return correlationId; }
   public void setCorrelationId(String correlationId) { this.correlationId = correlationId; }
   public Instant getCreatedAt() { return createdAt; }
+  public boolean isRelayPublished() { return relayPublished; }
+  public void setRelayPublished(boolean relayPublished) { this.relayPublished = relayPublished; }
 }

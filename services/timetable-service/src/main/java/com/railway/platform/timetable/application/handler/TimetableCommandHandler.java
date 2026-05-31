@@ -165,6 +165,8 @@ public class TimetableCommandHandler {
 
   // ── Cancel ──────────────────────────────────────────────────────────────────
 
+  @Timed(value = "timetable.command.duration", extraTags = {"command", "cancel"})
+  @Retryable(retryFor = {org.springframework.dao.TransientDataAccessException.class, org.springframework.dao.CannotAcquireLockException.class}, maxAttempts = 3, backoff = @Backoff(delay = 100, multiplier = 2.0, maxDelay = 1000))
   @Transactional
   public void handle(CancelCommand cmd) {
     var timetable = load(cmd.timetableId());

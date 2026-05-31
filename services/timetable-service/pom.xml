@@ -103,6 +103,16 @@
       <artifactId>micrometer-registry-prometheus</artifactId>
     </dependency>
 
+    <!-- Spring Retry for transient DB failure retries -->
+    <dependency>
+      <groupId>org.springframework.retry</groupId>
+      <artifactId>spring-retry</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-aop</artifactId>
+    </dependency>
+
     <!-- OpenAPI documentation -->
     <dependency>
       <groupId>org.springdoc</groupId>
