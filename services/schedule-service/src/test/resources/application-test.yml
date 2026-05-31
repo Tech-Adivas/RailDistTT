@@ -1,0 +1,26 @@
+# Test profile — all real values are injected via @DynamicPropertySource from Testcontainers.
+# These are DEV-ONLY placeholder values; the actual connection details are overridden at runtime.
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/test_db   # DEV-ONLY — overridden by Testcontainers
+    username: test                                   # DEV-ONLY
+    password: test                                   # DEV-ONLY
+  flyway:
+    enabled: true
+    baseline-on-migrate: false
+  kafka:
+    bootstrap-servers: localhost:9092               # DEV-ONLY — overridden by Testcontainers
+    consumer:
+      group-id: schedule-service-test-group
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+    producer:
+      transaction-id-prefix: test-schedule-tx-
+    properties:
+      schema.registry.url: mock://test             # Use mock schema registry in unit tests
+
+logging:
+  level:
+    com.railway.platform: DEBUG
+    org.apache.kafka: WARN
+    org.springframework.kafka: WARN

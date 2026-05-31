@@ -1,15 +1,19 @@
 package com.railway.platform.timetable.api.rest;
 
 import com.railway.platform.timetable.api.dto.request.*;
+import com.railway.platform.timetable.api.dto.response.AuditLogEntryResponse;
 import com.railway.platform.timetable.api.dto.response.TimetableResponse;
 import com.railway.platform.timetable.application.command.*;
 import com.railway.platform.timetable.application.handler.TimetableCommandHandler;
 import com.railway.platform.timetable.domain.repository.TimetableRepository;
+import com.railway.platform.timetable.domain.valueobject.LineId;
 import com.railway.platform.timetable.domain.valueobject.TimetableId;
+import com.railway.platform.timetable.infrastructure.persistence.repository.AuditLogJpaRepository;
 import com.railway.platform.common.error.ErrorCodes;
 import com.railway.platform.common.exception.NotFoundException;
 import jakarta.validation.Valid;
-import org.springframework.http.HttpStatus;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -20,18 +24,11 @@ import org.springframework.web.util.UriComponentsBuilder;
 import java.util.List;
 
 /**
- * REST controller for timetable write operations.
+ * REST controller for timetable write and limited read operations.
  *
- * <p>Every endpoint extracts the actor from the JWT principal — the actor is never supplied by the
- * client in the request body, preventing privilege escalation.
- *
- * <p>All three outcome paths are handled per endpoint:
- * <ul>
- *   <li>Success → 201/200/204 with body or Location header.
- *   <li>Validation failure → 422 (via GlobalExceptionHandler from common-lib).
- *   <li>Domain/constraint failure → appropriate 4xx (GlobalExceptionHandler).
- *   <li>Unexpected error → 500 (GlobalExceptionHandler).
- * </ul>
+ * <p>Actor is always extracted from the JWT principal — never from the request body.
+ * All three outcome paths are handled per endpoint: success (2xx), domain failure (4xx via
+ * GlobalExceptionHandler), unexpected error (500 via GlobalExceptionHandler).
  */
 @RestController
 @RequestMapping("/api/v1/timetables")
@@ -39,13 +36,19 @@ public class TimetableController {
 
   private final TimetableCommandHandler commandHandler;
   private final TimetableRepository repository;
+  private final AuditLogJpaRepository auditLogRepository;
 
-  public TimetableController(TimetableCommandHandler commandHandler, TimetableRepository repository) {
+  public TimetableController(
+      TimetableCommandHandler commandHandler,
+      TimetableRepository repository,
+      AuditLogJpaRepository auditLogRepository) {
     this.commandHandler = commandHandler;
     this.repository = repository;
+    this.auditLogRepository = auditLogRepository;
   }
 
-  /** Create a new timetable in DRAFT state. Returns 201 with Location header. */
+  // ── Create ──────────────────────────────────────────────────────────────────
+
   @PostMapping
   @PreAuthorize("hasRole('TIMETABLE_AUTHOR')")
   public ResponseEntity<TimetableResponse> create(
@@ -53,19 +56,18 @@ public class TimetableController {
       @AuthenticationPrincipal Jwt jwt,
       UriComponentsBuilder uriBuilder) {
 
-    var cmd = new CreateTimetableCommand(
+    var id = commandHandler.handle(new CreateTimetableCommand(
         req.lineId(), req.name(), req.description(),
-        req.effectiveDate(), req.expiryDate(), jwt.getSubject());
+        req.effectiveDate(), req.expiryDate(), jwt.getSubject()));
 
-    TimetableId id = commandHandler.handle(cmd);
     var timetable = repository.findById(id)
         .orElseThrow(() -> new NotFoundException(ErrorCodes.TIMETABLE_NOT_FOUND, "Timetable not found after create: " + id));
-
     var location = uriBuilder.path("/api/v1/timetables/{id}").buildAndExpand(id).toUri();
     return ResponseEntity.created(location).body(TimetableResponse.from(timetable));
   }
 
-  /** Update mutable fields of a DRAFT timetable. */
+  // ── Update ──────────────────────────────────────────────────────────────────
+
   @PatchMapping("/{id}")
   @PreAuthorize("hasRole('TIMETABLE_AUTHOR')")
   public ResponseEntity<Void> update(
@@ -78,7 +80,8 @@ public class TimetableController {
     return ResponseEntity.noContent().build();
   }
 
-  /** Submit a DRAFT timetable for review. */
+  // ── Submit for review ───────────────────────────────────────────────────────
+
   @PostMapping("/{id}/submit")
   @PreAuthorize("hasRole('TIMETABLE_AUTHOR')")
   public ResponseEntity<Void> submitForReview(
@@ -88,7 +91,8 @@ public class TimetableController {
     return ResponseEntity.noContent().build();
   }
 
-  /** Approve a PENDING_REVIEW timetable. Self-approval is blocked by domain invariant. */
+  // ── Approve ─────────────────────────────────────────────────────────────────
+
   @PostMapping("/{id}/approve")
   @PreAuthorize("hasRole('TIMETABLE_APPROVER')")
   public ResponseEntity<Void> approve(
@@ -98,7 +102,8 @@ public class TimetableController {
     return ResponseEntity.noContent().build();
   }
 
-  /** Reject a PENDING_REVIEW timetable with a mandatory reason. */
+  // ── Reject ──────────────────────────────────────────────────────────────────
+
   @PostMapping("/{id}/reject")
   @PreAuthorize("hasRole('TIMETABLE_APPROVER')")
   public ResponseEntity<Void> reject(
@@ -110,10 +115,22 @@ public class TimetableController {
     return ResponseEntity.noContent().build();
   }
 
-  /**
-   * Emergency activate — bypasses the approval workflow. Requires EMERGENCY_OPERATOR role.
-   * Justification is mandatory and recorded in the immutable audit log.
-   */
+  // ── Request changes ─────────────────────────────────────────────────────────
+
+  /** Returns a PENDING_REVIEW timetable to DRAFT. Reviewer must supply written feedback. */
+  @PostMapping("/{id}/request-changes")
+  @PreAuthorize("hasRole('TIMETABLE_APPROVER')")
+  public ResponseEntity<Void> requestChanges(
+      @PathVariable String id,
+      @Valid @RequestBody RequestChangesRequest req,
+      @AuthenticationPrincipal Jwt jwt) {
+
+    commandHandler.handle(new RequestChangesCommand(id, jwt.getSubject(), req.feedback()));
+    return ResponseEntity.noContent().build();
+  }
+
+  // ── Emergency activate ──────────────────────────────────────────────────────
+
   @PostMapping("/{id}/emergency-activate")
   @PreAuthorize("hasRole('EMERGENCY_OPERATOR')")
   public ResponseEntity<Void> emergencyActivate(
@@ -125,7 +142,8 @@ public class TimetableController {
     return ResponseEntity.noContent().build();
   }
 
-  /** Cancel a timetable before it becomes ACTIVE. */
+  // ── Cancel ──────────────────────────────────────────────────────────────────
+
   @PostMapping("/{id}/cancel")
   @PreAuthorize("hasAnyRole('TIMETABLE_AUTHOR', 'TIMETABLE_APPROVER', 'ADMIN')")
   public ResponseEntity<Void> cancel(
@@ -135,7 +153,8 @@ public class TimetableController {
     return ResponseEntity.noContent().build();
   }
 
-  /** Get a single timetable by ID. */
+  // ── Read ─────────────────────────────────────────────────────────────────────
+
   @GetMapping("/{id}")
   @PreAuthorize("hasAnyRole('TIMETABLE_AUTHOR', 'TIMETABLE_APPROVER', 'EMERGENCY_OPERATOR', 'ADMIN', 'READ_ONLY')")
   public ResponseEntity<TimetableResponse> getById(@PathVariable String id) {
@@ -145,13 +164,29 @@ public class TimetableController {
         .orElseThrow(() -> new NotFoundException(ErrorCodes.TIMETABLE_NOT_FOUND, "Timetable not found: " + id));
   }
 
-  /** List all timetables for a line. */
   @GetMapping
   @PreAuthorize("hasAnyRole('TIMETABLE_AUTHOR', 'TIMETABLE_APPROVER', 'EMERGENCY_OPERATOR', 'ADMIN', 'READ_ONLY')")
   public ResponseEntity<List<TimetableResponse>> listByLine(@RequestParam String lineId) {
-    var timetables = repository.findByLineId(
-        com.railway.platform.timetable.domain.valueobject.LineId.of(lineId))
-        .stream().map(TimetableResponse::from).toList();
-    return ResponseEntity.ok(timetables);
+    return ResponseEntity.ok(
+        repository.findByLineId(LineId.of(lineId)).stream()
+            .map(TimetableResponse::from).toList());
+  }
+
+  /**
+   * Paginated, descending audit history for a timetable.
+   * Includes every state transition, the responsible actor, and emergency justifications.
+   */
+  @GetMapping("/{id}/audit-log")
+  @PreAuthorize("hasAnyRole('TIMETABLE_APPROVER', 'ADMIN')")
+  public ResponseEntity<List<AuditLogEntryResponse>> getAuditLog(
+      @PathVariable String id,
+      @RequestParam(defaultValue = "0") int page,
+      @RequestParam(defaultValue = "50") int size) {
+
+    var entries = auditLogRepository
+        .findByAggregateIdOrderByOccurredAtDesc(id, PageRequest.of(page, size, Sort.by("occurredAt").descending()))
+        .map(AuditLogEntryResponse::from)
+        .toList();
+    return ResponseEntity.ok(entries);
   }
 }

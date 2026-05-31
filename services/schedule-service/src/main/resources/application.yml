@@ -1,0 +1,112 @@
+spring:
+  application:
+    name: schedule-service
+
+  # ── DataSource ──────────────────────────────────────────────────────────────
+  # TODO(config): All values injected at runtime from Vault path:
+  #   secret/schedule-service/db  →  username, password
+  #   secret/schedule-service/db  →  url (host/port from infra config)
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:schedule_db}
+    username: ${DB_USERNAME:PLACEHOLDER_DB_USERNAME}
+    password: ${DB_PASSWORD:PLACEHOLDER_DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        jdbc:
+          time_zone: UTC
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: false
+
+  # ── Kafka ────────────────────────────────────────────────────────────────────
+  # TODO(config): bootstrap-servers and schema.registry.url from Vault:
+  #   secret/schedule-service/kafka  →  bootstrap-servers
+  #   secret/schedule-service/schema-registry  →  schema.registry.url
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: schedule-service-group
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      isolation-level: read_committed
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: io.confluent.kafka.serializers.KafkaAvroDeserializer
+    producer:
+      transaction-id-prefix: schedule-service-tx-
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: io.confluent.kafka.serializers.KafkaAvroSerializer
+      acks: all
+      enable-idempotence: true
+    properties:
+      schema.registry.url: ${SCHEMA_REGISTRY_URL:http://localhost:8081}
+      specific.avro.reader: true
+
+# ── Actuator / health ────────────────────────────────────────────────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: when_authorized
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+
+# ── Logging ──────────────────────────────────────────────────────────────────
+logging:
+  pattern:
+    console: "%d{HH:mm:ss.SSS} [%thread] %-5level [%X{correlationId}] %logger{36} - %msg%n"
+
+server:
+  port: 8082
+
+---
+# DEV-ONLY profile — used when running locally via docker-compose
+# All values here are dummy/test values, never used in staging or production.
+spring:
+  config:
+    activate:
+      on-profile: dev
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/schedule_db
+    username: schedule_user    # DEV-ONLY
+    password: schedule_pass    # DEV-ONLY
+
+  kafka:
+    bootstrap-servers: localhost:9092  # DEV-ONLY — KRaft broker in docker-compose
+    properties:
+      schema.registry.url: http://localhost:8081  # DEV-ONLY
+
+---
+# Test profile — Testcontainers overrides applied via @DynamicPropertySource
+spring:
+  config:
+    activate:
+      on-profile: test
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/test_schedule_db
+    username: test  # DEV-ONLY — Testcontainers
+    password: test  # DEV-ONLY — Testcontainers
+
+  flyway:
+    enabled: true

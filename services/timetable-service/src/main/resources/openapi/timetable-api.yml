@@ -1,0 +1,412 @@
+openapi: "3.1.0"
+info:
+  title: Timetable Service API
+  description: |
+    Write-side API for the Railway Timetable Distribution Platform.
+    Manages timetable lifecycle: creation, approval workflow, emergency overrides, and audit log.
+    All endpoints require a valid OIDC JWT with appropriate role claims.
+  version: "1.0.0"
+  contact:
+    name: Railway Platform Team
+
+servers:
+  - url: http://localhost:8081
+    description: Local development
+  - url: https://PLACEHOLDER_API_GATEWAY_URL/timetable
+    description: Production (via API Gateway)
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Timetables
+    description: Timetable lifecycle management
+  - name: Audit
+    description: Immutable audit trail
+
+paths:
+  /api/v1/timetables:
+    post:
+      tags: [Timetables]
+      summary: Create a new timetable in DRAFT state
+      operationId: createTimetable
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTimetableRequest'
+      responses:
+        '201':
+          description: Timetable created. Location header contains the new resource URL.
+          headers:
+            Location:
+              schema:
+                type: string
+              description: URL of the created timetable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TimetableResponse'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+    get:
+      tags: [Timetables]
+      summary: List timetables for a railway line
+      operationId: listTimetablesByLine
+      parameters:
+        - name: lineId
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "GWR-PAD-BRI"
+      responses:
+        '200':
+          description: List of timetables for the line
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TimetableResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/timetables/{id}:
+    get:
+      tags: [Timetables]
+      summary: Get a timetable by ID
+      operationId: getTimetableById
+      parameters:
+        - $ref: '#/components/parameters/TimetableId'
+      responses:
+        '200':
+          description: Timetable found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TimetableResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    patch:
+      tags: [Timetables]
+      summary: Update a DRAFT timetable
+      operationId: updateTimetable
+      parameters:
+        - $ref: '#/components/parameters/TimetableId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTimetableRequest'
+      responses:
+        '204':
+          description: Updated successfully
+        '409':
+          $ref: '#/components/responses/OptimisticLockConflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /api/v1/timetables/{id}/submit:
+    post:
+      tags: [Timetables]
+      summary: Submit a DRAFT timetable for review
+      operationId: submitTimetableForReview
+      parameters:
+        - $ref: '#/components/parameters/TimetableId'
+      responses:
+        '204':
+          description: Submitted
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /api/v1/timetables/{id}/approve:
+    post:
+      tags: [Timetables]
+      summary: Approve a PENDING_REVIEW timetable
+      operationId: approveTimetable
+      parameters:
+        - $ref: '#/components/parameters/TimetableId'
+      responses:
+        '204':
+          description: Approved
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /api/v1/timetables/{id}/reject:
+    post:
+      tags: [Timetables]
+      summary: Reject a PENDING_REVIEW timetable
+      operationId: rejectTimetable
+      parameters:
+        - $ref: '#/components/parameters/TimetableId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RejectRequest'
+      responses:
+        '204':
+          description: Rejected
+
+  /api/v1/timetables/{id}/request-changes:
+    post:
+      tags: [Timetables]
+      summary: Return a PENDING_REVIEW timetable to DRAFT for rework
+      operationId: requestChanges
+      parameters:
+        - $ref: '#/components/parameters/TimetableId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RequestChangesRequest'
+      responses:
+        '204':
+          description: Returned to DRAFT
+
+  /api/v1/timetables/{id}/emergency-activate:
+    post:
+      tags: [Timetables]
+      summary: Emergency-activate a timetable (bypasses approval workflow)
+      operationId: emergencyActivateTimetable
+      parameters:
+        - $ref: '#/components/parameters/TimetableId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmergencyActivateRequest'
+      responses:
+        '204':
+          description: Emergency activation successful
+
+  /api/v1/timetables/{id}/cancel:
+    post:
+      tags: [Timetables]
+      summary: Cancel a timetable (before activation)
+      operationId: cancelTimetable
+      parameters:
+        - $ref: '#/components/parameters/TimetableId'
+      responses:
+        '204':
+          description: Cancelled
+
+  /api/v1/timetables/{id}/audit-log:
+    get:
+      tags: [Audit]
+      summary: Get paginated audit history for a timetable
+      operationId: getTimetableAuditLog
+      parameters:
+        - $ref: '#/components/parameters/TimetableId'
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 0
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: Audit log entries, most recent first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AuditLogEntryResponse'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    TimetableId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    ValidationError:
+      description: Request validation failed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    OptimisticLockConflict:
+      description: Concurrent modification — re-fetch and retry
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    Unauthorized:
+      description: Missing or invalid JWT
+    Forbidden:
+      description: Insufficient role
+
+  schemas:
+    CreateTimetableRequest:
+      type: object
+      required: [lineId, name, effectiveDate]
+      properties:
+        lineId:
+          type: string
+          example: "GWR-PAD-BRI"
+        name:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+          maxLength: 2000
+        effectiveDate:
+          type: string
+          format: date
+        expiryDate:
+          type: string
+          format: date
+          nullable: true
+
+    UpdateTimetableRequest:
+      type: object
+      required: [name, effectiveDate]
+      properties:
+        name:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+        effectiveDate:
+          type: string
+          format: date
+        expiryDate:
+          type: string
+          format: date
+          nullable: true
+
+    RejectRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          maxLength: 1000
+
+    RequestChangesRequest:
+      type: object
+      required: [feedback]
+      properties:
+        feedback:
+          type: string
+          maxLength: 2000
+
+    EmergencyActivateRequest:
+      type: object
+      required: [justification]
+      properties:
+        justification:
+          type: string
+          maxLength: 2000
+
+    TimetableResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        lineId:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [DRAFT, PENDING_REVIEW, APPROVED, REJECTED, ACTIVE, EMERGENCY_ACTIVE, SUPERSEDED, CANCELLED]
+        effectiveDate:
+          type: string
+          format: date
+        expiryDate:
+          type: string
+          format: date
+          nullable: true
+        authorId:
+          type: string
+        reviewerId:
+          type: string
+          nullable: true
+        version:
+          type: integer
+          format: int64
+
+    AuditLogEntryResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        eventType:
+          type: string
+        previousStatus:
+          type: string
+          nullable: true
+        newStatus:
+          type: string
+        actor:
+          type: string
+        justification:
+          type: string
+          nullable: true
+        occurredAt:
+          type: string
+          format: date-time
+
+    ApiError:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        correlationId:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        fieldErrors:
+          type: array
+          nullable: true
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+              rejectedValue: {}
+              reason:
+                type: string

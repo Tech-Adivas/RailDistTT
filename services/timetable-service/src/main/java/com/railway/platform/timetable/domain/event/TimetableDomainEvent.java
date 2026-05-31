@@ -7,14 +7,23 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * Immutable record of a domain event raised by the Timetable aggregate.
+ * Immutable domain event raised by the Timetable aggregate.
  *
- * <p>These events are collected during command execution and written to the Transactional Outbox
- * by the command handler. They are NOT the Avro events published to Kafka — those are built by
- * the OutboxEventMapper from these domain events.
+ * <p>Collected during command execution and written to the Transactional Outbox by the command
+ * handler. These are NOT the Avro events published to Kafka; the OutboxEventWriter serialises them
+ * to JSON and Debezium forwards them. Separating domain events from Avro schema keeps the domain
+ * layer free of messaging infrastructure.
  *
- * <p>Keeping domain events separate from Avro events means the domain layer has no dependency on
- * the messaging infrastructure.
+ * @param eventId       UUID identifying this specific event instance (idempotency key).
+ * @param timetableId   Aggregate root ID.
+ * @param lineId        Railway line this timetable belongs to.
+ * @param eventType     The kind of change.
+ * @param previousStatus Status before this event (null for CREATED).
+ * @param newStatus     Status after this event.
+ * @param actor         User or system identity that triggered the change.
+ * @param notes         Optional free-text associated with the event (rejection reason, etc.).
+ * @param occurredAt    Server timestamp when the domain event was raised.
+ * @param justification Mandatory for EMERGENCY_ACTIVATED; null for all other event types.
  */
 public record TimetableDomainEvent(
     String eventId,
@@ -24,9 +33,9 @@ public record TimetableDomainEvent(
     TimetableStatus previousStatus,
     TimetableStatus newStatus,
     String actor,
-    String payload,      // JSON payload (built by OutboxEventMapper)
+    String notes,
     Instant occurredAt,
-    String justification // non-null only for EMERGENCY_ACTIVATED
+    String justification
 ) {
 
   public enum EventType {
@@ -42,46 +51,48 @@ public record TimetableDomainEvent(
     CANCELLED
   }
 
-  // ── Factory methods (one per state transition) ───────────────────────────────
+  // ── Factory methods ──────────────────────────────────────────────────────────
 
   public static TimetableDomainEvent created(Timetable t, String actor) {
-    return build(t, EventType.CREATED, null, TimetableStatus.DRAFT, actor, null);
+    return build(t, EventType.CREATED, null, TimetableStatus.DRAFT, actor, null, null);
   }
 
   public static TimetableDomainEvent updated(Timetable t, String actor) {
-    return build(t, EventType.UPDATED, TimetableStatus.DRAFT, TimetableStatus.DRAFT, actor, null);
+    return build(t, EventType.UPDATED, TimetableStatus.DRAFT, TimetableStatus.DRAFT, actor, null, null);
   }
 
   public static TimetableDomainEvent submittedForReview(Timetable t, String actor) {
-    return build(t, EventType.SUBMITTED_FOR_REVIEW, TimetableStatus.DRAFT, TimetableStatus.PENDING_REVIEW, actor, null);
+    return build(t, EventType.SUBMITTED_FOR_REVIEW, TimetableStatus.DRAFT, TimetableStatus.PENDING_REVIEW, actor, null, null);
   }
 
   public static TimetableDomainEvent approved(Timetable t, String actor) {
-    return build(t, EventType.APPROVED, TimetableStatus.PENDING_REVIEW, TimetableStatus.APPROVED, actor, null);
+    return build(t, EventType.APPROVED, TimetableStatus.PENDING_REVIEW, TimetableStatus.APPROVED, actor, null, null);
   }
 
+  /** @param reason Mandatory rejection reason; stored in notes and audit log. */
   public static TimetableDomainEvent rejected(Timetable t, String actor, String reason) {
-    return build(t, EventType.REJECTED, TimetableStatus.PENDING_REVIEW, TimetableStatus.REJECTED, actor, reason);
+    return build(t, EventType.REJECTED, TimetableStatus.PENDING_REVIEW, TimetableStatus.REJECTED, actor, reason, null);
   }
 
   public static TimetableDomainEvent changesRequested(Timetable t, String actor) {
-    return build(t, EventType.CHANGES_REQUESTED, TimetableStatus.PENDING_REVIEW, TimetableStatus.DRAFT, actor, null);
+    return build(t, EventType.CHANGES_REQUESTED, TimetableStatus.PENDING_REVIEW, TimetableStatus.DRAFT, actor, null, null);
   }
 
   public static TimetableDomainEvent activated(Timetable t, String actor) {
-    return build(t, EventType.ACTIVATED, TimetableStatus.APPROVED, TimetableStatus.ACTIVE, actor, null);
+    return build(t, EventType.ACTIVATED, TimetableStatus.APPROVED, TimetableStatus.ACTIVE, actor, null, null);
   }
 
+  /** @param justification Mandatory; stored separately from notes for compliance queries. */
   public static TimetableDomainEvent emergencyActivated(Timetable t, String actor, String justification) {
-    return build(t, EventType.EMERGENCY_ACTIVATED, t.getStatus(), TimetableStatus.EMERGENCY_ACTIVE, actor, justification);
+    return build(t, EventType.EMERGENCY_ACTIVATED, t.getStatus(), TimetableStatus.EMERGENCY_ACTIVE, actor, null, justification);
   }
 
   public static TimetableDomainEvent superseded(Timetable t, String actor) {
-    return build(t, EventType.SUPERSEDED, t.getStatus(), TimetableStatus.SUPERSEDED, actor, null);
+    return build(t, EventType.SUPERSEDED, t.getStatus(), TimetableStatus.SUPERSEDED, actor, null, null);
   }
 
   public static TimetableDomainEvent cancelled(Timetable t, String actor) {
-    return build(t, EventType.CANCELLED, t.getStatus(), TimetableStatus.CANCELLED, actor, null);
+    return build(t, EventType.CANCELLED, t.getStatus(), TimetableStatus.CANCELLED, actor, null, null);
   }
 
   private static TimetableDomainEvent build(
@@ -90,7 +101,8 @@ public record TimetableDomainEvent(
       TimetableStatus prev,
       TimetableStatus next,
       String actor,
-      String payload) {
+      String notes,
+      String justification) {
     return new TimetableDomainEvent(
         UUID.randomUUID().toString(),
         t.getId().toString(),
@@ -99,8 +111,8 @@ public record TimetableDomainEvent(
         prev,
         next,
         actor,
-        payload,
+        notes,
         Instant.now(),
-        payload != null && type == EventType.EMERGENCY_ACTIVATED ? payload : null);
+        justification);
   }
 }

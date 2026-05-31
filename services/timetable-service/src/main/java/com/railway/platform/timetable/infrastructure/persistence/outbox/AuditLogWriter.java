@@ -47,7 +47,7 @@ public class AuditLogWriter {
       entry.setNewStatus(event.newStatus().name());
       entry.setActor(actor);
       entry.setCorrelationId(correlationId());
-      entry.setJustification(event.justification());
+      entry.setJustification(event.justification()); // non-null only for EMERGENCY_ACTIVATED
       entry.setOccurredAt(event.occurredAt());
 
       repository.save(entry);

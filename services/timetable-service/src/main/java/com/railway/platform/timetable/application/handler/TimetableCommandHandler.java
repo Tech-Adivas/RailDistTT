@@ -136,6 +136,16 @@ public class TimetableCommandHandler {
         cmd.timetableId(), cmd.actor(), cmd.justification());
   }
 
+  // ── Request changes ─────────────────────────────────────────────────────────
+
+  @Transactional
+  public void handle(RequestChangesCommand cmd) {
+    var timetable = load(cmd.timetableId());
+    timetable.requestChanges(cmd.reviewerId());
+    persistWithOutboxAndAudit(timetable, cmd.reviewerId());
+    log.info("Changes requested [id={}] [reviewer={}]", cmd.timetableId(), cmd.reviewerId());
+  }
+
   // ── Cancel ──────────────────────────────────────────────────────────────────
 
   @Transactional
