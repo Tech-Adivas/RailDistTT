@@ -1,0 +1,153 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+
+  # ── OAuth2 / OIDC ─────────────────────────────────────────────────────────
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # TODO(config): Vault path secret/api-gateway/oidc → issuer-uri
+          # Obtain from: your OIDC provider (Keycloak realm URL, Cognito user pool, etc.)
+          issuer-uri: ${OIDC_ISSUER_URI:PLACEHOLDER_OIDC_ISSUER_URI}
+
+  # ── Redis (rate limiter backing store) ────────────────────────────────────
+  data:
+    redis:
+      # TODO(config): Vault path secret/api-gateway/redis → host, port, password
+      # Obtain from: Terraform output `elasticache_primary_endpoint`
+      host: ${REDIS_HOST:PLACEHOLDER_REDIS_HOST}
+      port: ${REDIS_PORT:6379}
+      # password: ${vault.secret.redis-password}  # Vault: secret/data/railway/api-gateway
+      lettuce:
+        pool:
+          max-active: 20
+          min-idle: 5
+
+  # ── Spring Cloud Gateway ──────────────────────────────────────────────────
+  cloud:
+    gateway:
+      # Routes are defined programmatically in GatewayRoutesConfig.
+      # HttpClient timeout settings:
+      httpclient:
+        connect-timeout: 3000   # ms
+        response-timeout: 30s
+      # Global default filters (applied to every route):
+      default-filters:
+        - name: DedupeResponseHeader
+          args:
+            name: Access-Control-Allow-Origin Access-Control-Allow-Credentials
+            strategy: RETAIN_UNIQUE
+      metrics:
+        enabled: true
+
+# ── Upstream service URIs ──────────────────────────────────────────────────
+gateway:
+  upstream:
+    # TODO(config): Replace with Kubernetes ClusterIP service names (e.g. http://timetable-service:8081)
+    # or Terraform output for non-k8s deployments.
+    timetable-service-uri: ${TIMETABLE_SERVICE_URI:http://PLACEHOLDER_TIMETABLE_SERVICE_HOST:8081}
+    query-service-uri: ${QUERY_SERVICE_URI:http://PLACEHOLDER_QUERY_SERVICE_HOST:8083}
+    distribution-service-uri: ${DISTRIBUTION_SERVICE_URI:http://PLACEHOLDER_DISTRIBUTION_SERVICE_HOST:8084}
+  rate-limiter:
+    # TODO(config): Vault path secret/api-gateway/rate-limit → replenish-rate, burst-capacity
+    replenish-rate: ${RATE_LIMIT_REPLENISH:100}
+    burst-capacity: ${RATE_LIMIT_BURST:200}
+    requested-tokens: 1
+
+# ── Resilience4j circuit breakers ─────────────────────────────────────────
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        # Open after 50% failures in a 10-call sliding window
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        # Stay open for 30s then move to half-open
+        wait-duration-in-open-state: 30s
+        # Allow 3 calls through in half-open to probe recovery
+        permitted-number-of-calls-in-half-open-state: 3
+        # Slow calls (>5s) count as failures
+        slow-call-duration-threshold: 5s
+        slow-call-rate-threshold: 80
+    instances:
+      timetable-service:
+        base-config: default
+      query-service:
+        base-config: default
+        # Reads are cheaper — tolerate more before opening
+        failure-rate-threshold: 60
+      distribution-service:
+        base-config: default
+  timelimiter:
+    configs:
+      default:
+        timeout-duration: 10s
+        cancel-running-future: true
+    instances:
+      timetable-service:
+        base-config: default
+      query-service:
+        timeout-duration: 5s
+      distribution-service:
+        base-config: default
+
+# ── Actuator ──────────────────────────────────────────────────────────────
+management:
+  server:
+    port: 8090  # Actuator on a separate port — network-restricted in prod
+  endpoints:
+    web:
+      exposure:
+        include: health, info, metrics, prometheus, circuitbreakers
+  endpoint:
+    health:
+      show-details: when-authorized
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      service: api-gateway
+    export:
+      prometheus:
+        enabled: true
+  health:
+    circuitbreakers:
+      enabled: true
+    ratelimiters:
+      enabled: true
+
+---
+# ── Local development profile (DEV-ONLY) ──────────────────────────────────
+# Activated with: spring.profiles.active=local
+# Provides local defaults so the service starts without Vault/Redis/OIDC.
+# All values below are DEV-ONLY — never use in staging or production.
+spring:
+  config:
+    activate:
+      on-profile: local
+
+  data:
+    redis:
+      host: localhost          # DEV-ONLY: local Redis from docker-compose
+      port: 6379
+
+gateway:
+  upstream:
+    timetable-service-uri: http://localhost:8081    # DEV-ONLY
+    query-service-uri: http://localhost:8083         # DEV-ONLY
+    distribution-service-uri: http://localhost:8084  # DEV-ONLY
+  rate-limiter:
+    replenish-rate: 1000   # DEV-ONLY: effectively unlimited locally
+    burst-capacity: 2000
+
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        # Looser thresholds locally to avoid tripping while debugging
+        failure-rate-threshold: 90
+        wait-duration-in-open-state: 5s

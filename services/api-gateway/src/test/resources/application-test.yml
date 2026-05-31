@@ -1,0 +1,26 @@
+# Test profile — overrides that allow unit/integration tests to run without
+# external dependencies (Redis, OIDC provider, downstream services).
+spring:
+  cloud:
+    gateway:
+      # Disable route definitions in tests unless explicitly tested
+      enabled: false
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://localhost:9090/auth/realms/test  # WireMock stub
+
+  data:
+    redis:
+      host: localhost
+      port: 16379  # Offset to avoid conflicts with a running Redis
+
+gateway:
+  upstream:
+    timetable-service-uri: http://localhost:9091
+    query-service-uri: http://localhost:9092
+    distribution-service-uri: http://localhost:9093
+  rate-limiter:
+    replenish-rate: 1000
+    burst-capacity: 2000
