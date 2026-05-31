@@ -1,0 +1,24 @@
+# Test profile — values overridden via @DynamicPropertySource from Testcontainers.
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/test_db  # DEV-ONLY — overridden by Testcontainers
+    username: test                                  # DEV-ONLY
+    password: test                                  # DEV-ONLY
+  flyway:
+    enabled: true
+  kafka:
+    bootstrap-servers: localhost:9092              # DEV-ONLY — overridden by Testcontainers
+    consumer:
+      group-id: query-service-test-group
+    properties:
+      schema.registry.url: mock://test
+  data:
+    redis:
+      host: localhost                               # DEV-ONLY — overridden by Testcontainers
+      port: 6379
+      password: ""
+
+logging:
+  level:
+    com.railway.platform: DEBUG
+    org.apache.kafka: WARN

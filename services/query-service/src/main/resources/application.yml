@@ -1,0 +1,125 @@
+spring:
+  application:
+    name: query-service
+
+  # ── DataSource ──────────────────────────────────────────────────────────────
+  # TODO(config): All values injected at runtime from Vault path:
+  #   secret/query-service/db  →  username, password
+  #   secret/query-service/db  →  url (host/port from infra config)
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:query_db}
+    username: ${DB_USERNAME:PLACEHOLDER_DB_USERNAME}
+    password: ${DB_PASSWORD:PLACEHOLDER_DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 15
+      minimum-idle: 3
+      connection-timeout: 30000
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        jdbc:
+          time_zone: UTC
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: false
+
+  # ── Redis ────────────────────────────────────────────────────────────────────
+  # TODO(config): Obtain from Vault path secret/query-service/redis
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:PLACEHOLDER_REDIS_PASSWORD}
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 8
+          min-idle: 2
+
+  # ── Kafka ────────────────────────────────────────────────────────────────────
+  # TODO(config): bootstrap-servers and schema.registry.url from Vault:
+  #   secret/query-service/kafka  →  bootstrap-servers
+  #   secret/query-service/schema-registry  →  schema.registry.url
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: query-service-group
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      isolation-level: read_committed
+    properties:
+      schema.registry.url: ${SCHEMA_REGISTRY_URL:http://localhost:8081}
+      specific.avro.reader: true
+
+# ── Actuator / health ────────────────────────────────────────────────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: when_authorized
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+
+logging:
+  pattern:
+    console: "%d{HH:mm:ss.SSS} [%thread] %-5level [%X{correlationId}] %logger{36} - %msg%n"
+
+server:
+  port: 8083
+
+---
+# DEV-ONLY profile — used when running locally via docker-compose.
+spring:
+  config:
+    activate:
+      on-profile: dev
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/query_db
+    username: query_user   # DEV-ONLY
+    password: query_pass   # DEV-ONLY
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password: ""          # DEV-ONLY — no auth in local Redis
+
+  kafka:
+    bootstrap-servers: localhost:9092
+    properties:
+      schema.registry.url: http://localhost:8081
+
+---
+# Test profile — overridden by @DynamicPropertySource in integration tests.
+spring:
+  config:
+    activate:
+      on-profile: test
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/test_query_db
+    username: test  # DEV-ONLY
+    password: test  # DEV-ONLY
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password: ""   # DEV-ONLY
+
+  flyway:
+    enabled: true

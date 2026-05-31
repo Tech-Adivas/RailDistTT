@@ -1,0 +1,212 @@
+openapi: "3.1.0"
+info:
+  title: Query Service API
+  description: |
+    Read-side API for the Railway Timetable Distribution Platform (CQRS query side).
+    Returns eventually-consistent projections of timetable and schedule state.
+    Cache-aside via Redis; read model rebuilt from Kafka event replay.
+  version: "1.0.0"
+  contact:
+    name: Railway Platform Team
+
+servers:
+  - url: http://localhost:8083
+    description: Local development
+  - url: https://PLACEHOLDER_API_GATEWAY_URL/query
+    description: Production (via API Gateway)
+
+tags:
+  - name: Timetables
+    description: Read-side timetable queries
+  - name: Schedules
+    description: Computed schedule queries
+
+paths:
+  /api/v1/timetables/{id}:
+    get:
+      tags: [Timetables]
+      summary: Get a timetable by ID (read model)
+      description: |
+        Returns the current read model state for a timetable.
+        Response may be up to 5 minutes stale for ACTIVE timetables (Redis TTL).
+        For the authoritative write-side state use the timetable-service API.
+      operationId: getTimetable
+      parameters:
+        - $ref: '#/components/parameters/TimetableId'
+      responses:
+        '200':
+          description: Timetable found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TimetableView'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/lines/{lineId}/timetables:
+    get:
+      tags: [Timetables]
+      summary: List timetables for a railway line
+      operationId: listTimetablesByLine
+      parameters:
+        - name: lineId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "GWR-PAD-BRI"
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [DRAFT, PENDING_REVIEW, APPROVED, REJECTED, ACTIVE, EMERGENCY_ACTIVE, SUPERSEDED, CANCELLED]
+          description: Filter by timetable status
+      responses:
+        '200':
+          description: List of timetables
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TimetableView'
+
+  /api/v1/timetables/{id}/schedule:
+    get:
+      tags: [Schedules]
+      summary: Get the latest computed schedule for a timetable
+      operationId: getScheduleForTimetable
+      parameters:
+        - $ref: '#/components/parameters/TimetableId'
+      responses:
+        '200':
+          description: Latest computed schedule
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduleView'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/schedules/active:
+    get:
+      tags: [Schedules]
+      summary: Get active schedules for a line on a date
+      description: |
+        Returns all computed schedules for a railway line where effectiveDate ≤ date
+        and (expiryDate IS NULL OR expiryDate ≥ date).
+      operationId: getActiveSchedules
+      parameters:
+        - name: lineId
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "GWR-PAD-BRI"
+        - name: date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          example: "2026-06-15"
+      responses:
+        '200':
+          description: Active schedules for the line on the given date
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ScheduleView'
+
+components:
+  parameters:
+    TimetableId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+
+  schemas:
+    TimetableView:
+      type: object
+      description: Read model projection of a timetable's current state
+      properties:
+        id:
+          type: string
+          format: uuid
+        lineId:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [DRAFT, PENDING_REVIEW, APPROVED, REJECTED, ACTIVE, EMERGENCY_ACTIVE, SUPERSEDED, CANCELLED]
+        effectiveDate:
+          type: string
+          format: date
+        expiryDate:
+          type: string
+          format: date
+          nullable: true
+        authorId:
+          type: string
+        reviewerId:
+          type: string
+          nullable: true
+        version:
+          type: integer
+          format: int64
+
+    ScheduleView:
+      type: object
+      description: Computed schedule projection with full stop-time data
+      properties:
+        id:
+          type: string
+          format: uuid
+        timetableId:
+          type: string
+        lineId:
+          type: string
+        effectiveDate:
+          type: string
+          format: date
+        expiryDate:
+          type: string
+          format: date
+          nullable: true
+        scheduleData:
+          type: string
+          description: Full ScheduleComputedEvent payload serialised as JSON
+        computedAt:
+          type: string
+          format: date-time
+
+    ApiError:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        correlationId:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
