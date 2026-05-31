@@ -1,0 +1,132 @@
+spring:
+  application:
+    name: timetable-service
+
+  datasource:
+    # TODO(config): Replace PLACEHOLDER_RDS_ENDPOINT with your RDS writer endpoint.
+    # Obtain from: Terraform output `rds_writer_endpoint`.
+    url: ${DB_URL:jdbc:postgresql://PLACEHOLDER_RDS_ENDPOINT:5432/timetable_db}
+    username: ${vault.secret.db-username}   # Vault: secret/data/railway/timetable-service
+    password: ${vault.secret.db-password}   # Vault: secret/data/railway/timetable-service
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      pool-name: timetable-hikari
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 3000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      connection-test-query: SELECT 1
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+    open-in-view: false
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    validate-on-migrate: true
+
+  kafka:
+    # TODO(config): Replace with MSK bootstrap brokers.
+    # Obtain from: Terraform output `msk_bootstrap_brokers_sasl_iam`.
+    bootstrap-servers: ${KAFKA_BROKERS:PLACEHOLDER_MSK_BROKER_1:9092,PLACEHOLDER_MSK_BROKER_2:9092}
+    properties:
+      schema.registry.url: ${SCHEMA_REGISTRY_URL:http://PLACEHOLDER_SCHEMA_REGISTRY:8081}
+      auto.register.schemas: false
+      use.latest.version: true
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: io.confluent.kafka.serializers.KafkaAvroSerializer
+      acks: all
+      retries: 10
+      properties:
+        enable.idempotence: true
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # TODO(config): Replace with your OIDC issuer URI (e.g. Cognito user pool URL).
+          # Obtain from: AWS Cognito console or Terraform output.
+          issuer-uri: ${OIDC_ISSUER_URI:http://PLACEHOLDER_OIDC_ISSUER}
+
+  cloud:
+    vault:
+      # TODO(config): Replace with Vault server address.
+      uri: ${VAULT_ADDR:http://PLACEHOLDER_VAULT_ADDR:8200}
+      authentication: APPROLE
+      app-role:
+        role-id: ${VAULT_ROLE_ID}
+        secret-id: ${VAULT_SECRET_ID}
+  config:
+    import: "vault://secret/data/railway/timetable-service"
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,readiness,liveness,prometheus,info,metrics
+  endpoint:
+    health:
+      show-details: when-authorized
+      probes:
+        enabled: true
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+    tags:
+      service: ${spring.application.name}
+      environment: ${ENVIRONMENT:local}
+  tracing:
+    sampling:
+      probability: 1.0
+
+server:
+  port: 8081
+  shutdown: graceful
+
+spring.lifecycle.timeout-per-shutdown-phase: 30s
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+---
+spring:
+  config:
+    activate:
+      on-profile: local
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/timetable_db
+    username: railway
+    password: railway_dev_password   # DEV-ONLY
+
+  kafka:
+    bootstrap-servers: localhost:29092
+    properties:
+      schema.registry.url: http://localhost:8081
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # In local dev, disable JWT validation and use a permissive security config.
+          # See SecurityConfig for the local profile override.
+          issuer-uri: http://localhost:9999/not-used-in-local
+
+  cloud:
+    vault:
+      uri: http://localhost:8200
+      authentication: TOKEN
+      token: dev-only-root-token   # DEV-ONLY
+  config:
+    import: "vault://secret/data/railway/timetable-service"

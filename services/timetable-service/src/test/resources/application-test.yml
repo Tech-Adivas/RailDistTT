@@ -1,0 +1,36 @@
+# Test profile — disables Vault, Kafka, and real OIDC for integration tests.
+# Testcontainers supplies real PostgreSQL; Kafka is not needed for persistence-layer tests.
+
+spring:
+  cloud:
+    vault:
+      enabled: false
+  config:
+    import: ""
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+
+  kafka:
+    # Point at an embedded Kafka for tests that need it; disable for persistence-only tests.
+    bootstrap-servers: ${KAFKA_BROKERS:localhost:29092}
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # Disable JWT validation in tests — use @WithMockUser instead.
+          issuer-uri: ""
+
+management:
+  tracing:
+    sampling:
+      probability: 0.0
+
+logging:
+  level:
+    org.springframework: WARN
+    com.railway.platform: DEBUG
+    org.flywaydb: INFO
