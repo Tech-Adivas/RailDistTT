@@ -2,6 +2,7 @@ package com.railway.platform.distribution;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
  * Distribution Service — consumes ScheduleComputedEvents and fans out to all
@@ -9,6 +10,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * and per-channel tracking.
  */
 @SpringBootApplication
+@EnableScheduling
 public class DistributionServiceApplication {
   public static void main(String[] args) {
     SpringApplication.run(DistributionServiceApplication.class, args);

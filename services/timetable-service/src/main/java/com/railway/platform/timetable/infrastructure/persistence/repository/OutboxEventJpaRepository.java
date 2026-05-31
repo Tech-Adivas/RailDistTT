@@ -18,4 +18,7 @@ public interface OutboxEventJpaRepository extends JpaRepository<OutboxEventJpaEn
 
   /** Used by the cleanup job to prune relay-published rows older than the retention cutoff. */
   int deleteByRelayPublishedTrueAndCreatedAtBefore(Instant cutoff);
+
+  /** Used by the health indicator to detect Debezium lag. */
+  long countByCreatedAtBefore(Instant threshold);
 }

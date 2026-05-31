@@ -29,7 +29,7 @@ import java.util.List;
  *
  * <p>The relay marks each row {@code relay_published=true} after a successful send so it is
  * not published again on the next scheduled run. Rows are never deleted by either the relay
- * or Debezium; a separate {@link OutboxEventsCleanupJob} handles retention.
+ * or Debezium; a separate {@link com.railway.platform.timetable.infrastructure.maintenance.OutboxEventsCleanupJob} handles retention.
  */
 @Component
 public class OutboxFallbackRelay {

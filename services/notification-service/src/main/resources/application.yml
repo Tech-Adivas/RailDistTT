@@ -60,10 +60,18 @@ management:
     web:
       exposure:
         include: health,info,prometheus
+  health:
+    kafka:
+      enabled: true
   metrics:
     export:
       prometheus:
         enabled: true
+
+# ── Maintenance jobs ──────────────────────────────────────────────────────────
+maintenance:
+  processed-events:
+    cleanup-cron: "0 0 2 * * *"
 
 logging:
   pattern:

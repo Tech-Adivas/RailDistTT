@@ -51,10 +51,32 @@ management:
     web:
       exposure:
         include: health,info,prometheus
+  health:
+    kafka:
+      enabled: true
   metrics:
     export:
       prometheus:
         enabled: true
+
+# ── Resilience4j ─────────────────────────────────────────────────────────────
+resilience4j:
+  circuitbreaker:
+    instances:
+      kafka-distribution-producer:
+        sliding-window-size: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 2
+  timelimiter:
+    instances:
+      kafka-distribution-producer:
+        timeout-duration: 5s
+
+# ── Maintenance jobs ──────────────────────────────────────────────────────────
+maintenance:
+  processed-events:
+    cleanup-cron: "0 0 2 * * *"
 
 logging:
   pattern:

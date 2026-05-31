@@ -65,10 +65,38 @@ management:
   endpoint:
     health:
       show-details: when_authorized
+  health:
+    kafka:
+      enabled: true
   metrics:
     export:
       prometheus:
         enabled: true
+
+# ── Resilience4j ─────────────────────────────────────────────────────────────
+resilience4j:
+  circuitbreaker:
+    instances:
+      kafka-schedule-producer:
+        sliding-window-size: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 2
+  timelimiter:
+    instances:
+      kafka-schedule-producer:
+        timeout-duration: 5s
+
+# ── Maintenance jobs ──────────────────────────────────────────────────────────
+maintenance:
+  processed-events:
+    cleanup-cron: "0 0 2 * * *"
+
+# ── Outbox relay ──────────────────────────────────────────────────────────────
+outbox:
+  relay:
+    delay-ms: 300000
+    lag-threshold-minutes: 5
 
 # ── Logging ──────────────────────────────────────────────────────────────────
 logging:
