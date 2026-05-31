@@ -1,0 +1,30 @@
+# Test profile — values overridden via @DynamicPropertySource from Testcontainers.
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/test_db    # DEV-ONLY — overridden by Testcontainers
+    username: test                                    # DEV-ONLY
+    password: test                                    # DEV-ONLY
+  flyway:
+    enabled: true
+  kafka:
+    bootstrap-servers: localhost:9092                # DEV-ONLY — overridden by Testcontainers
+    consumer:
+      group-id: notification-service-test-group
+    properties:
+      schema.registry.url: mock://test
+
+notification:
+  fcm:
+    server-key: test-fcm-key        # DEV-ONLY
+  twilio:
+    account-sid: test-twilio-sid    # DEV-ONLY
+    auth-token: test-twilio-token   # DEV-ONLY
+    from-number: "+10000000000"     # DEV-ONLY
+  sendgrid:
+    api-key: test-sendgrid-key      # DEV-ONLY
+    from-address: test@example.com  # DEV-ONLY
+
+logging:
+  level:
+    com.railway.platform: DEBUG
+    org.apache.kafka: WARN
