@@ -1,0 +1,79 @@
+{
+  "namespace": "com.railway.platform.events",
+  "name": "TimetableChangedEvent",
+  "type": "record",
+  "doc": "Emitted when a timetable aggregate is created, updated, or transitions state. Published to railway.timetable.changed via the Transactional Outbox (ADR-001).",
+  "fields": [
+    {
+      "name": "metadata",
+      "type": "com.railway.platform.events.EventMetadata",
+      "doc": "Standard event metadata including eventId for idempotency."
+    },
+    {
+      "name": "timetableId",
+      "type": "string",
+      "doc": "UUID of the timetable aggregate."
+    },
+    {
+      "name": "changeType",
+      "type": {
+        "type": "enum",
+        "name": "TimetableChangeType",
+        "doc": "What kind of change triggered this event.",
+        "symbols": [
+          "CREATED",
+          "UPDATED",
+          "SUBMITTED_FOR_REVIEW",
+          "APPROVED",
+          "REJECTED",
+          "ACTIVATED",
+          "SUPERSEDED",
+          "CANCELLED",
+          "EMERGENCY_ACTIVATED",
+          "MAINTENANCE_WINDOW_APPLIED"
+        ]
+      }
+    },
+    {
+      "name": "effectiveDate",
+      "type": {
+        "type": "int",
+        "logicalType": "date"
+      },
+      "doc": "The date from which this timetable version is effective."
+    },
+    {
+      "name": "expiryDate",
+      "type": ["null", {"type": "int", "logicalType": "date"}],
+      "default": null,
+      "doc": "The date on which this timetable version expires, or null if open-ended."
+    },
+    {
+      "name": "lineId",
+      "type": "string",
+      "doc": "Railway line identifier this timetable belongs to."
+    },
+    {
+      "name": "version",
+      "type": "long",
+      "doc": "Optimistic lock version of the aggregate at the time of this event."
+    },
+    {
+      "name": "previousStatus",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Status before this change, or null for CREATED events."
+    },
+    {
+      "name": "newStatus",
+      "type": "string",
+      "doc": "Status after this change."
+    },
+    {
+      "name": "emergencyJustification",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Mandatory justification text for EMERGENCY_ACTIVATED changes; null otherwise."
+    }
+  ]
+}

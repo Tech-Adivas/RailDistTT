@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Structured JSON logging configuration for all Railway platform services.
+  Uses logstash-logback-encoder to produce one JSON object per log line.
+
+  Every log line includes:
+    - timestamp (ISO-8601)
+    - level
+    - service (from spring.application.name)
+    - correlationId (from MDC — set by CorrelationIdFilter / KafkaCorrelationIdPropagator)
+    - logger (class name)
+    - thread
+    - message
+    - stack_trace (only on exceptions)
+
+  In local dev, the CONSOLE appender uses a human-readable pattern for readability.
+  In production (via Spring profile), JSON goes to stdout and is collected by Grafana Alloy → Loki.
+-->
+<configuration>
+
+  <springProperty name="SERVICE_NAME" source="spring.application.name" defaultValue="railway-service"/>
+
+  <!-- ── Human-readable console output for local development ────────────────── -->
+  <springProfile name="local,default">
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+      <encoder>
+        <pattern>
+          %d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} [cid=%X{correlationId}] - %msg%n
+        </pattern>
+      </encoder>
+    </appender>
+
+    <root level="INFO">
+      <appender-ref ref="CONSOLE"/>
+    </root>
+
+    <logger name="com.railway.platform" level="DEBUG"/>
+    <logger name="org.springframework.kafka" level="INFO"/>
+  </springProfile>
+
+  <!-- ── Structured JSON logging for staging / production ───────────────────── -->
+  <springProfile name="staging,production">
+    <appender name="JSON_STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+      <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+        <providers>
+          <timestamp/>
+          <logLevel/>
+          <loggerName>
+            <fieldName>logger</fieldName>
+          </loggerName>
+          <threadName>
+            <fieldName>thread</fieldName>
+          </threadName>
+          <mdc/>
+          <message/>
+          <stackTrace>
+            <fieldName>stack_trace</fieldName>
+            <throwableConverter class="net.logstash.logback.stacktrace.ShortenedThrowableConverter">
+              <maxDepthPerCause>10</maxDepthPerCause>
+              <rootCauseFirst>true</rootCauseFirst>
+            </throwableConverter>
+          </stackTrace>
+        </providers>
+        <!-- Enrich every line with the service name so Loki queries can filter by service. -->
+        <customFields>{"service":"${SERVICE_NAME}"}</customFields>
+      </encoder>
+    </appender>
+
+    <root level="INFO">
+      <appender-ref ref="JSON_STDOUT"/>
+    </root>
+  </springProfile>
+
+</configuration>

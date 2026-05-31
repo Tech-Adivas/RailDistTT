@@ -1,0 +1,92 @@
+{
+  "namespace": "com.railway.platform.events",
+  "name": "ScheduleComputedEvent",
+  "type": "record",
+  "doc": "Emitted by Schedule Service after computing the effective schedule from a TimetableChangedEvent. Published to railway.schedule.computed.",
+  "fields": [
+    {
+      "name": "metadata",
+      "type": "com.railway.platform.events.EventMetadata",
+      "doc": "Standard event metadata. Inherits correlationId from the triggering TimetableChangedEvent."
+    },
+    {
+      "name": "timetableId",
+      "type": "string",
+      "doc": "The timetable whose change triggered this computation."
+    },
+    {
+      "name": "lineId",
+      "type": "string",
+      "doc": "Railway line identifier."
+    },
+    {
+      "name": "effectiveDate",
+      "type": {"type": "int", "logicalType": "date"},
+      "doc": "Date from which this computed schedule is effective."
+    },
+    {
+      "name": "expiryDate",
+      "type": ["null", {"type": "int", "logicalType": "date"}],
+      "default": null,
+      "doc": "Expiry date, or null if open-ended."
+    },
+    {
+      "name": "services",
+      "type": {
+        "type": "array",
+        "items": {
+          "type": "record",
+          "name": "ScheduledService",
+          "doc": "A single train service within the computed schedule.",
+          "fields": [
+            {"name": "serviceId", "type": "string"},
+            {"name": "trainNumber", "type": "string"},
+            {
+              "name": "stops",
+              "type": {
+                "type": "array",
+                "items": {
+                  "type": "record",
+                  "name": "StopTime",
+                  "fields": [
+                    {"name": "stationCode", "type": "string"},
+                    {"name": "stationName", "type": "string"},
+                    {
+                      "name": "arrivalTime",
+                      "type": ["null", {"type": "int", "logicalType": "time-millis"}],
+                      "default": null,
+                      "doc": "Null for origin stations."
+                    },
+                    {
+                      "name": "departureTime",
+                      "type": ["null", {"type": "int", "logicalType": "time-millis"}],
+                      "default": null,
+                      "doc": "Null for terminus stations."
+                    },
+                    {
+                      "name": "platform",
+                      "type": ["null", "string"],
+                      "default": null,
+                      "doc": "Platform number/letter, or null if not assigned yet."
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "affectedByMaintenance",
+              "type": "boolean",
+              "default": false,
+              "doc": "True if this service runs on a track segment with an active maintenance window."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "triggeringEventId",
+      "type": "string",
+      "doc": "eventId of the TimetableChangedEvent that triggered this computation — for traceability."
+    }
+  ]
+}

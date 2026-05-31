@@ -1,0 +1,88 @@
+{
+  "namespace": "com.railway.platform.events",
+  "name": "NotificationRequestEvent",
+  "type": "record",
+  "doc": "Request to send a notification. Consumed by Notification Service. Idempotent on eventId — duplicate delivery will not send duplicate notifications.",
+  "fields": [
+    {
+      "name": "metadata",
+      "type": "com.railway.platform.events.EventMetadata"
+    },
+    {
+      "name": "notificationType",
+      "type": {
+        "type": "enum",
+        "name": "NotificationType",
+        "symbols": [
+          "TIMETABLE_APPROVED",
+          "TIMETABLE_ACTIVATED",
+          "SCHEDULE_CHANGE",
+          "EMERGENCY_UPDATE",
+          "MAINTENANCE_WINDOW_REMINDER",
+          "SERVICE_DISRUPTION",
+          "POST_EMERGENCY_REVIEW_REMINDER"
+        ]
+      }
+    },
+    {
+      "name": "channels",
+      "type": {
+        "type": "array",
+        "items": {
+          "type": "enum",
+          "name": "NotificationChannel",
+          "symbols": ["PUSH", "SMS", "EMAIL"]
+        }
+      },
+      "doc": "Which channels to notify via. Distribution Service determines the appropriate set."
+    },
+    {
+      "name": "recipientType",
+      "type": {
+        "type": "enum",
+        "name": "RecipientType",
+        "symbols": ["SPECIFIC_USER", "LINE_SUBSCRIBERS", "OPERATORS", "ALL_AFFECTED_PASSENGERS"]
+      }
+    },
+    {
+      "name": "recipientIds",
+      "type": {
+        "type": "array",
+        "items": "string"
+      },
+      "default": [],
+      "doc": "Specific user IDs to notify. Empty means recipientType determines the audience."
+    },
+    {
+      "name": "titleTemplate",
+      "type": "string",
+      "doc": "Notification title template. Use {{variable}} placeholders."
+    },
+    {
+      "name": "bodyTemplate",
+      "type": "string",
+      "doc": "Notification body template. Use {{variable}} placeholders."
+    },
+    {
+      "name": "templateVariables",
+      "type": {
+        "type": "map",
+        "values": "string"
+      },
+      "default": {},
+      "doc": "Key-value pairs for substituting into titleTemplate and bodyTemplate."
+    },
+    {
+      "name": "isEmergency",
+      "type": "boolean",
+      "default": false,
+      "doc": "True for emergency alerts; consumers send these with highest priority."
+    },
+    {
+      "name": "scheduleAfter",
+      "type": ["null", {"type": "long", "logicalType": "timestamp-millis"}],
+      "default": null,
+      "doc": "If set, the notification must not be sent before this time. Null means send immediately."
+    }
+  ]
+}

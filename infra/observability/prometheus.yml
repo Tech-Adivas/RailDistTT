@@ -1,0 +1,86 @@
+# Prometheus configuration for the Railway Timetable Distribution Platform.
+# Scrapes all service /actuator/prometheus endpoints.
+# Alert rules are in infra/observability/alert-rules/.
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    environment: local
+    platform: railway-timetable
+
+# Load alert rules.
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+scrape_configs:
+
+  # ── Prometheus self-monitoring ──────────────────────────────────────────────
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # ── API Gateway ─────────────────────────────────────────────────────────────
+  - job_name: api-gateway
+    metrics_path: /actuator/prometheus
+    static_configs:
+      # TODO(config): replace with service discovery (K8s annotations) in production.
+      - targets: ["host.docker.internal:8080"]
+    relabel_configs:
+      - target_label: service
+        replacement: api-gateway
+
+  # ── Timetable Service ────────────────────────────────────────────────────────
+  - job_name: timetable-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["host.docker.internal:8081"]
+    relabel_configs:
+      - target_label: service
+        replacement: timetable-service
+
+  # ── Schedule Service ─────────────────────────────────────────────────────────
+  - job_name: schedule-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["host.docker.internal:8082"]
+    relabel_configs:
+      - target_label: service
+        replacement: schedule-service
+
+  # ── Query Service ─────────────────────────────────────────────────────────────
+  - job_name: query-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["host.docker.internal:8083"]
+    relabel_configs:
+      - target_label: service
+        replacement: query-service
+
+  # ── Distribution Service ─────────────────────────────────────────────────────
+  - job_name: distribution-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["host.docker.internal:8084"]
+    relabel_configs:
+      - target_label: service
+        replacement: distribution-service
+
+  # ── Notification Service ─────────────────────────────────────────────────────
+  - job_name: notification-service
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["host.docker.internal:8085"]
+    relabel_configs:
+      - target_label: service
+        replacement: notification-service
+
+  # ── Kafka (JMX exporter) ─────────────────────────────────────────────────────
+  # In production use the MSK CloudWatch exporter or Confluent's JMX exporter.
+  # For local dev, kafka-exporter runs alongside the broker.
+  - job_name: kafka
+    static_configs:
+      - targets: ["host.docker.internal:9308"]
+    relabel_configs:
+      - target_label: service
+        replacement: kafka

@@ -1,0 +1,143 @@
+# Golden skeleton application configuration.
+# Copy this to services/<name>/src/main/resources/application.yml and replace all
+# PLACEHOLDER_ values. See docs/CONFIGURATION.md for the full reference.
+
+spring:
+  application:
+    # TODO(config): Replace with the actual service name (kebab-case, e.g. timetable-service).
+    name: PLACEHOLDER_SERVICE_NAME
+
+  # ── Database ─────────────────────────────────────────────────────────────────
+  datasource:
+    # TODO(config): Replace with your RDS endpoint.
+    # Format: jdbc:postgresql://<RDS_WRITER_ENDPOINT>:5432/<db_name>
+    # Obtain from: Terraform output `rds_writer_endpoint`.
+    url: ${DB_URL:jdbc:postgresql://PLACEHOLDER_RDS_ENDPOINT:5432/PLACEHOLDER_DB_NAME}
+    username: ${vault.secret.db-username}   # Vault: secret/data/railway/<service>/db-username
+    password: ${vault.secret.db-password}   # Vault: secret/data/railway/<service>/db-password
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      pool-name: ${spring.application.name}-hikari
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 3000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      # Validate connections on borrow to detect stale connections after Multi-AZ failover.
+      connection-test-query: SELECT 1
+
+  # ── JPA / Hibernate ──────────────────────────────────────────────────────────
+  jpa:
+    hibernate:
+      ddl-auto: validate    # Flyway owns the schema; Hibernate must not touch it.
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: false
+        default_schema: public
+    open-in-view: false   # Never open a session in the view layer — prevents lazy-load in serialisation.
+
+  # ── Flyway ───────────────────────────────────────────────────────────────────
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    validate-on-migrate: true
+
+  # ── Kafka ────────────────────────────────────────────────────────────────────
+  kafka:
+    # TODO(config): Replace with MSK bootstrap brokers (comma-separated).
+    # Obtain from: Terraform output `msk_bootstrap_brokers_sasl_iam`.
+    bootstrap-servers: ${KAFKA_BROKERS:PLACEHOLDER_MSK_BROKER_1:9092,PLACEHOLDER_MSK_BROKER_2:9092}
+    properties:
+      # TODO(config): Replace with Schema Registry URL.
+      schema.registry.url: ${SCHEMA_REGISTRY_URL:http://PLACEHOLDER_SCHEMA_REGISTRY:8081}
+      # Use BACKWARD-compatible Avro (ADR-004).
+      auto.register.schemas: false
+      use.latest.version: true
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: io.confluent.kafka.serializers.KafkaAvroSerializer
+      acks: all         # Wait for all ISR replicas to acknowledge.
+      retries: 10
+      properties:
+        enable.idempotence: true
+        max.in.flight.requests.per.connection: 5
+    consumer:
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: io.confluent.kafka.serializers.KafkaAvroDeserializer
+      auto-offset-reset: earliest
+      enable-auto-commit: false   # Manual ack after successful processing — no offset commit on failure.
+      properties:
+        specific.avro.reader: true
+        isolation.level: read_committed   # Only consume committed messages (exactly-once producer txns).
+
+  # ── HashiCorp Vault ──────────────────────────────────────────────────────────
+  cloud:
+    vault:
+      # TODO(config): Replace with Vault server address.
+      # Obtain from: Terraform output `vault_address`.
+      uri: ${VAULT_ADDR:http://PLACEHOLDER_VAULT_ADDR:8200}
+      authentication: APPROLE
+      app-role:
+        role-id: ${VAULT_ROLE_ID}       # Injected by Kubernetes init container.
+        secret-id: ${VAULT_SECRET_ID}   # Injected by Kubernetes init container.
+  config:
+    # Import secrets from Vault. Path is per-service.
+    # TODO(config): replace with the actual service secret path.
+    import: "vault://secret/data/railway/PLACEHOLDER_SERVICE_NAME"
+
+# ── Actuator endpoints ─────────────────────────────────────────────────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,readiness,liveness,prometheus,info,metrics
+  endpoint:
+    health:
+      show-details: when-authorized
+      probes:
+        enabled: true
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+    tags:
+      # Tag every metric with the service name for Grafana filtering.
+      service: ${spring.application.name}
+      environment: ${ENVIRONMENT:local}
+  tracing:
+    # OpenTelemetry tracing — the OTel Java agent handles most instrumentation automatically.
+    sampling:
+      probability: 1.0    # 100% sampling in dev; reduce to 0.1 in production.
+
+# ── Graceful shutdown ─────────────────────────────────────────────────────────
+server:
+  shutdown: graceful
+  # Allow in-flight requests up to 30 s to complete before the JVM exits.
+spring.lifecycle.timeout-per-shutdown-phase: 30s
+
+---
+# ── Local dev profile — override for docker-compose stack ─────────────────────
+spring:
+  config:
+    activate:
+      on-profile: local
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/PLACEHOLDER_DB_NAME
+    username: railway
+    password: railway_dev_password   # DEV-ONLY
+
+  kafka:
+    bootstrap-servers: localhost:29092
+    properties:
+      schema.registry.url: http://localhost:8081
+
+  cloud:
+    vault:
+      uri: http://localhost:8200
+      token: dev-only-root-token   # DEV-ONLY
+      authentication: TOKEN
+
+  config:
+    import: "vault://secret/data/railway/PLACEHOLDER_SERVICE_NAME"

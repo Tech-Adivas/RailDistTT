@@ -1,0 +1,43 @@
+{
+  "namespace": "com.railway.platform.events",
+  "name": "EventMetadata",
+  "type": "record",
+  "doc": "Common metadata carried by every platform event. Consumers use eventId for idempotency deduplication.",
+  "fields": [
+    {
+      "name": "eventId",
+      "type": "string",
+      "doc": "UUID v4 uniquely identifying this event instance. Used by consumers for idempotency deduplication."
+    },
+    {
+      "name": "eventType",
+      "type": "string",
+      "doc": "Fully-qualified event type name (e.g. com.railway.platform.events.TimetableChangedEvent)."
+    },
+    {
+      "name": "occurredAt",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      },
+      "doc": "Epoch millis when the event occurred on the server. Not the time it was published to Kafka."
+    },
+    {
+      "name": "correlationId",
+      "type": "string",
+      "doc": "Correlation ID from the originating HTTP request. See CorrelationIdHolder for the propagation chain."
+    },
+    {
+      "name": "actor",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Username or service identity that caused this event. Null for system-initiated events."
+    },
+    {
+      "name": "schemaVersion",
+      "type": "int",
+      "default": 1,
+      "doc": "Schema version for this event type. Increment on BACKWARD-compatible additions. New fields must have defaults (ADR-004)."
+    }
+  ]
+}

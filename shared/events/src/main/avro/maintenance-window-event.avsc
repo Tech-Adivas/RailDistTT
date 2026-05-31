@@ -1,0 +1,69 @@
+{
+  "namespace": "com.railway.platform.events",
+  "name": "MaintenanceWindowEvent",
+  "type": "record",
+  "doc": "Emitted when a track maintenance window is created, updated, or cancelled. Published to railway.maintenance.windows. Triggers schedule recomputation for affected timetables.",
+  "fields": [
+    {
+      "name": "metadata",
+      "type": "com.railway.platform.events.EventMetadata"
+    },
+    {
+      "name": "windowId",
+      "type": "string",
+      "doc": "UUID of the maintenance window."
+    },
+    {
+      "name": "changeType",
+      "type": {
+        "type": "enum",
+        "name": "MaintenanceWindowChangeType",
+        "symbols": ["CREATED", "UPDATED", "CANCELLED", "COMPLETED"]
+      }
+    },
+    {
+      "name": "trackSegmentId",
+      "type": "string",
+      "doc": "Identifier of the affected track segment."
+    },
+    {
+      "name": "trackSegmentName",
+      "type": "string",
+      "doc": "Human-readable name of the track segment (e.g. 'London Paddington — Reading Up Main')."
+    },
+    {
+      "name": "startTime",
+      "type": {"type": "long", "logicalType": "timestamp-millis"},
+      "doc": "When the maintenance window begins."
+    },
+    {
+      "name": "endTime",
+      "type": {"type": "long", "logicalType": "timestamp-millis"},
+      "doc": "When the maintenance window ends."
+    },
+    {
+      "name": "maintenanceType",
+      "type": {
+        "type": "enum",
+        "name": "MaintenanceType",
+        "symbols": [
+          "PLANNED",
+          "EMERGENCY",
+          "INSPECTION",
+          "UPGRADE"
+        ]
+      }
+    },
+    {
+      "name": "affectsPassengerServices",
+      "type": "boolean",
+      "doc": "True if active passenger services must be rerouted or suspended during this window."
+    },
+    {
+      "name": "description",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Optional free-text description of the maintenance activity."
+    }
+  ]
+}

@@ -1,0 +1,56 @@
+{
+  "namespace": "com.railway.platform.events",
+  "name": "DistributionEvent",
+  "type": "record",
+  "doc": "Emitted by Distribution Service after publishing a schedule to a channel. Published to railway.distribution.events for tracking and saga compensation.",
+  "fields": [
+    {
+      "name": "metadata",
+      "type": "com.railway.platform.events.EventMetadata"
+    },
+    {
+      "name": "scheduleComputedEventId",
+      "type": "string",
+      "doc": "eventId of the ScheduleComputedEvent that triggered this distribution."
+    },
+    {
+      "name": "timetableId",
+      "type": "string"
+    },
+    {
+      "name": "channel",
+      "type": {
+        "type": "enum",
+        "name": "DistributionChannel",
+        "symbols": [
+          "PASSENGER_APP",
+          "STATION_DISPLAY",
+          "PARTNER_FEED",
+          "WEBSOCKET_PUSH",
+          "EMERGENCY_BROADCAST"
+        ]
+      },
+      "doc": "The channel this event represents distribution to."
+    },
+    {
+      "name": "status",
+      "type": {
+        "type": "enum",
+        "name": "DistributionStatus",
+        "symbols": ["PUBLISHED", "FAILED", "COMPENSATED"]
+      }
+    },
+    {
+      "name": "failureReason",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Human-readable failure reason when status=FAILED. Null on success."
+    },
+    {
+      "name": "isEmergency",
+      "type": "boolean",
+      "default": false,
+      "doc": "True for emergency timetable updates; consumers should prioritise processing."
+    }
+  ]
+}

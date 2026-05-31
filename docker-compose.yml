@@ -1,0 +1,319 @@
+---
+# Full local development stack for the Railway Timetable Distribution Platform.
+# Brings up: PostgreSQL, Kafka (KRaft), Schema Registry, Redis, HashiCorp Vault,
+# Debezium, Prometheus, Grafana, Loki, Tempo, and Grafana Alloy (OTel collector).
+#
+# Usage:
+#   make up       # start everything
+#   make down     # stop and remove containers (volumes preserved)
+#   make clean    # stop + remove containers AND volumes (destructive)
+#
+# Prerequisites: Docker Engine 27+, Docker Compose v2.
+
+services:
+
+  # ─────────────────────────────────────────────────────────────────
+  # PostgreSQL 16 — primary database for all services in local dev.
+  # In production each service has its own RDS instance.
+  # wal_level=logical is required by Debezium CDC.
+  # ─────────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16
+    container_name: railway-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: railway
+      POSTGRES_PASSWORD: railway_dev_password   # DEV-ONLY — never use in production
+      POSTGRES_DB: railway
+      # Enable logical replication so Debezium can read the WAL.
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8"
+    command: >
+      postgres
+        -c wal_level=logical
+        -c max_replication_slots=10
+        -c max_wal_senders=10
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U railway"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - railway-net
+
+  # ─────────────────────────────────────────────────────────────────
+  # Apache Kafka 4.3 in KRaft mode (no ZooKeeper).
+  # Single-broker for local dev; 3-broker cluster in production (MSK).
+  # KAFKA_CLUSTER_ID must be a valid base64-encoded UUID — generate with:
+  #   docker run --rm confluentinc/cp-kafka:7.9.1 kafka-storage random-uuid
+  # ─────────────────────────────────────────────────────────────────
+  kafka:
+    image: confluentinc/cp-kafka:7.9.1
+    container_name: railway-kafka
+    restart: unless-stopped
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka:9093"
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,EXTERNAL://0.0.0.0:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_LOG_RETENTION_HOURS: 168   # 7 days — enables full read-model replay
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      CLUSTER_ID: "MkU3OEVBNTcwNTJENDM2Qg"   # stable local dev cluster ID
+    ports:
+      - "29092:29092"   # external / host access
+      - "9092:9092"     # internal / container access
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+    networks:
+      - railway-net
+
+  # ─────────────────────────────────────────────────────────────────
+  # Confluent Schema Registry 7.9.1
+  # Enforces BACKWARD Avro schema compatibility (see ADR-004).
+  # ─────────────────────────────────────────────────────────────────
+  schema-registry:
+    image: confluentinc/cp-schema-registry:7.9.1
+    container_name: railway-schema-registry
+    restart: unless-stopped
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: kafka:9092
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
+      # Enforce BACKWARD compatibility globally (ADR-004).
+      SCHEMA_REGISTRY_SCHEMA_COMPATIBILITY_LEVEL: BACKWARD
+    ports:
+      - "8081:8081"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8081/subjects || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks:
+      - railway-net
+
+  # ─────────────────────────────────────────────────────────────────
+  # Debezium Server 3.1 — CDC relay for the Transactional Outbox.
+  # Reads the PostgreSQL WAL and publishes outbox rows to Kafka.
+  # Config file: infra/debezium/application.properties
+  # ─────────────────────────────────────────────────────────────────
+  debezium:
+    image: debezium/server:3.1.2.Final
+    container_name: railway-debezium
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      schema-registry:
+        condition: service_healthy
+    volumes:
+      - ./infra/debezium:/debezium/conf:ro
+    ports:
+      - "8083:8083"
+    networks:
+      - railway-net
+
+  # ─────────────────────────────────────────────────────────────────
+  # Redis 7.4 — cache layer for the Query Service (cache-aside).
+  # AUTH password is DEV-ONLY.
+  # ─────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7.4-alpine
+    container_name: railway-redis
+    restart: unless-stopped
+    command: redis-server --requirepass redis_dev_password --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "redis_dev_password", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - railway-net
+
+  # ─────────────────────────────────────────────────────────────────
+  # HashiCorp Vault 1.19 in dev mode.
+  # Root token: dev-only-root-token (DEV-ONLY — never use in production).
+  # Secrets are seeded by infra/vault/seed-dev-secrets.sh on first start.
+  # ─────────────────────────────────────────────────────────────────
+  vault:
+    image: hashicorp/vault:1.19
+    container_name: railway-vault
+    restart: unless-stopped
+    cap_add:
+      - IPC_LOCK
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: dev-only-root-token   # DEV-ONLY
+      VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
+      VAULT_ADDR: http://0.0.0.0:8200
+    ports:
+      - "8200:8200"
+    healthcheck:
+      test: ["CMD-SHELL", "vault status || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - railway-net
+
+  # Seed dev secrets after Vault is healthy.
+  vault-init:
+    image: hashicorp/vault:1.19
+    container_name: railway-vault-init
+    depends_on:
+      vault:
+        condition: service_healthy
+    environment:
+      VAULT_ADDR: http://vault:8200
+      VAULT_TOKEN: dev-only-root-token   # DEV-ONLY
+    volumes:
+      - ./infra/vault:/vault-config:ro
+    entrypoint: ["/bin/sh", "/vault-config/seed-dev-secrets.sh"]
+    networks:
+      - railway-net
+    restart: on-failure
+
+  # ─────────────────────────────────────────────────────────────────
+  # Prometheus 3.4 — metrics scraping.
+  # Scrape config: infra/observability/prometheus.yml
+  # ─────────────────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v3.4.1
+    container_name: railway-prometheus
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=15d
+      - --web.enable-lifecycle
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infra/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infra/observability/alert-rules:/etc/prometheus/rules:ro
+      - prometheus_data:/prometheus
+    networks:
+      - railway-net
+
+  # ─────────────────────────────────────────────────────────────────
+  # Grafana 12 — dashboards for metrics, logs, and traces.
+  # Provisioned datasources: Prometheus, Loki, Tempo.
+  # Admin password: admin (DEV-ONLY).
+  # ─────────────────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:12.0.0
+    container_name: railway-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin   # DEV-ONLY
+      GF_FEATURE_TOGGLES_ENABLE: traceqlEditor
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./infra/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+      - loki
+      - tempo
+    networks:
+      - railway-net
+
+  # ─────────────────────────────────────────────────────────────────
+  # Loki 3.5 — log aggregation backend.
+  # Logs are shipped by Grafana Alloy running as a sidecar/agent.
+  # ─────────────────────────────────────────────────────────────────
+  loki:
+    image: grafana/loki:3.5.0
+    container_name: railway-loki
+    restart: unless-stopped
+    command: -config.file=/etc/loki/loki.yml
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./infra/observability/loki.yml:/etc/loki/loki.yml:ro
+      - loki_data:/loki
+    networks:
+      - railway-net
+
+  # ─────────────────────────────────────────────────────────────────
+  # Grafana Tempo 2.8 — distributed tracing backend.
+  # Services export spans via OTel gRPC (port 4317) to Alloy, which
+  # forwards to Tempo.
+  # ─────────────────────────────────────────────────────────────────
+  tempo:
+    image: grafana/tempo:2.8.0
+    container_name: railway-tempo
+    restart: unless-stopped
+    command: -config.file=/etc/tempo/tempo.yml
+    ports:
+      - "3200:3200"   # Tempo HTTP API
+      - "4317:4317"   # OTel gRPC receiver
+      - "4318:4318"   # OTel HTTP receiver
+    volumes:
+      - ./infra/observability/tempo.yml:/etc/tempo/tempo.yml:ro
+      - tempo_data:/tmp/tempo
+    networks:
+      - railway-net
+
+  # ─────────────────────────────────────────────────────────────────
+  # Grafana Alloy 1.8 — OpenTelemetry collector + log scraper.
+  # Collects OTel traces from services and Docker logs via Loki.
+  # ─────────────────────────────────────────────────────────────────
+  alloy:
+    image: grafana/alloy:v1.8.0
+    container_name: railway-alloy
+    restart: unless-stopped
+    command: run /etc/alloy/config.alloy
+    ports:
+      - "12345:12345"   # Alloy UI
+    volumes:
+      - ./infra/observability/alloy-config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/log:/var/log:ro
+    depends_on:
+      - loki
+      - tempo
+    networks:
+      - railway-net
+
+# ─────────────────────────────────────────────────────────────────
+# Named volumes — data persists across container restarts.
+# Use `make clean` to wipe them.
+# ─────────────────────────────────────────────────────────────────
+volumes:
+  postgres_data:
+  kafka_data:
+  redis_data:
+  prometheus_data:
+  grafana_data:
+  loki_data:
+  tempo_data:
+
+networks:
+  railway-net:
+    driver: bridge

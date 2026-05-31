@@ -1,0 +1,142 @@
+# SLO burn-rate alert rules for the Railway Timetable Distribution Platform.
+# Based on the multi-window, multi-burn-rate method (Google SRE Workbook).
+# Alerts fire on: fast burn (1h window), slow burn (6h window).
+
+groups:
+
+  # ── Read API Availability SLO (target: 99.9%) ──────────────────────────────
+  - name: read-api-availability
+    rules:
+      - alert: ReadApiAvailabilityFastBurn
+        expr: |
+          (
+            sum(rate(http_server_requests_seconds_count{service=~"query-service|api-gateway", status=~"5.."}[1h]))
+            /
+            sum(rate(http_server_requests_seconds_count{service=~"query-service|api-gateway"}[1h]))
+          ) > 14.4 * (1 - 0.999)
+        for: 2m
+        labels:
+          severity: critical
+          slo: read-availability
+        annotations:
+          summary: "Read API error rate burning SLO budget too fast (1h window)"
+          description: "Current error rate is {{ $value | humanizePercentage }}. SLO target is 99.9%."
+          runbook_url: "https://github.com/tech-adivas/raildisttt/blob/main/docs/runbooks/read-api-availability.md"
+
+      - alert: ReadApiAvailabilitySlowBurn
+        expr: |
+          (
+            sum(rate(http_server_requests_seconds_count{service=~"query-service|api-gateway", status=~"5.."}[6h]))
+            /
+            sum(rate(http_server_requests_seconds_count{service=~"query-service|api-gateway"}[6h]))
+          ) > 6 * (1 - 0.999)
+        for: 15m
+        labels:
+          severity: warning
+          slo: read-availability
+        annotations:
+          summary: "Read API error rate elevated (6h window)"
+          description: "Current error rate is {{ $value | humanizePercentage }}."
+
+  # ── Read API p99 Latency SLO (target: < 300 ms) ────────────────────────────
+  - name: read-api-latency
+    rules:
+      - alert: ReadApiLatencyP99High
+        expr: |
+          histogram_quantile(0.99,
+            sum by (le, service) (
+              rate(http_server_requests_seconds_bucket{service=~"query-service|api-gateway"}[5m])
+            )
+          ) > 0.300
+        for: 5m
+        labels:
+          severity: warning
+          slo: read-latency
+        annotations:
+          summary: "Read API p99 latency > 300ms"
+          description: "Service {{ $labels.service }} p99 latency is {{ $value | humanizeDuration }}."
+
+  # ── Write API p99 Latency SLO (target: < 800 ms) ──────────────────────────
+  - name: write-api-latency
+    rules:
+      - alert: WriteApiLatencyP99High
+        expr: |
+          histogram_quantile(0.99,
+            sum by (le, service) (
+              rate(http_server_requests_seconds_bucket{service="timetable-service"}[5m])
+            )
+          ) > 0.800
+        for: 5m
+        labels:
+          severity: warning
+          slo: write-latency
+        annotations:
+          summary: "Write API p99 latency > 800ms"
+          description: "Timetable service p99 latency is {{ $value | humanizeDuration }}."
+
+  # ── Kafka Consumer Lag ─────────────────────────────────────────────────────
+  - name: kafka-consumer-lag
+    rules:
+      - alert: KafkaConsumerLagHigh
+        expr: kafka_consumer_group_lag > 1000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Kafka consumer group lag is high"
+          description: "Consumer group {{ $labels.consumergroup }} on topic {{ $labels.topic }} has lag {{ $value }}."
+
+      - alert: KafkaConsumerLagCritical
+        expr: kafka_consumer_group_lag > 10000
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Kafka consumer group lag is critically high"
+          description: "Consumer group {{ $labels.consumergroup }} lag {{ $value }} — possible processing outage."
+
+  # ── Dead Letter Queue Depth ────────────────────────────────────────────────
+  - name: dlq
+    rules:
+      - alert: DLQMessagesPresent
+        expr: kafka_topic_partitions_messages_in_rate{topic=~".*dlq.*"} > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Messages arriving in DLQ"
+          description: "DLQ topic {{ $labels.topic }} is receiving messages. Manual triage required."
+
+  # ── Error Rate Spike ────────────────────────────────────────────────────────
+  - name: error-rate
+    rules:
+      - alert: ServiceErrorRateSpike
+        expr: |
+          sum by (service) (
+            rate(http_server_requests_seconds_count{status=~"5.."}[5m])
+          )
+          /
+          sum by (service) (
+            rate(http_server_requests_seconds_count[5m])
+          ) > 0.05
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Service {{ $labels.service }} error rate > 5%"
+          description: "Current error rate: {{ $value | humanizePercentage }}."
+
+  # ── JVM Memory ─────────────────────────────────────────────────────────────
+  - name: jvm
+    rules:
+      - alert: JvmHeapUsageHigh
+        expr: |
+          jvm_memory_used_bytes{area="heap"}
+          /
+          jvm_memory_max_bytes{area="heap"} > 0.85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "JVM heap usage > 85% on {{ $labels.service }}"
+          description: "Heap usage: {{ $value | humanizePercentage }}. Consider scaling or investigating memory leak."
