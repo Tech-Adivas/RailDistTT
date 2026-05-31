@@ -10,11 +10,14 @@ import com.railway.platform.timetable.domain.valueobject.LineId;
 import com.railway.platform.timetable.domain.valueobject.TimetableId;
 import com.railway.platform.timetable.infrastructure.persistence.outbox.OutboxEventWriter;
 import com.railway.platform.timetable.infrastructure.persistence.outbox.AuditLogWriter;
+import io.micrometer.core.annotation.Timed;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Counter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -65,6 +68,8 @@ public class TimetableCommandHandler {
 
   // ── Create ──────────────────────────────────────────────────────────────────
 
+  @Timed(value = "timetable.command.duration", extraTags = {"command", "create"})
+  @Retryable(retryFor = {org.springframework.dao.TransientDataAccessException.class, org.springframework.dao.CannotAcquireLockException.class}, maxAttempts = 3, backoff = @Backoff(delay = 100, multiplier = 2.0, maxDelay = 1000))
   @Transactional
   public TimetableId handle(CreateTimetableCommand cmd) {
     var timetable = Timetable.create(
@@ -84,6 +89,8 @@ public class TimetableCommandHandler {
 
   // ── Update ──────────────────────────────────────────────────────────────────
 
+  @Timed(value = "timetable.command.duration", extraTags = {"command", "update"})
+  @Retryable(retryFor = {org.springframework.dao.TransientDataAccessException.class, org.springframework.dao.CannotAcquireLockException.class}, maxAttempts = 3, backoff = @Backoff(delay = 100, multiplier = 2.0, maxDelay = 1000))
   @Transactional
   public void handle(UpdateTimetableCommand cmd) {
     var timetable = load(cmd.timetableId());
@@ -94,6 +101,8 @@ public class TimetableCommandHandler {
 
   // ── Submit for review ───────────────────────────────────────────────────────
 
+  @Timed(value = "timetable.command.duration", extraTags = {"command", "submit"})
+  @Retryable(retryFor = {org.springframework.dao.TransientDataAccessException.class, org.springframework.dao.CannotAcquireLockException.class}, maxAttempts = 3, backoff = @Backoff(delay = 100, multiplier = 2.0, maxDelay = 1000))
   @Transactional
   public void handle(SubmitForReviewCommand cmd) {
     var timetable = load(cmd.timetableId());
@@ -104,6 +113,8 @@ public class TimetableCommandHandler {
 
   // ── Approve ─────────────────────────────────────────────────────────────────
 
+  @Timed(value = "timetable.command.duration", extraTags = {"command", "approve"})
+  @Retryable(retryFor = {org.springframework.dao.TransientDataAccessException.class, org.springframework.dao.CannotAcquireLockException.class}, maxAttempts = 3, backoff = @Backoff(delay = 100, multiplier = 2.0, maxDelay = 1000))
   @Transactional
   public void handle(ApproveCommand cmd) {
     var timetable = load(cmd.timetableId());
@@ -115,6 +126,8 @@ public class TimetableCommandHandler {
 
   // ── Reject ──────────────────────────────────────────────────────────────────
 
+  @Timed(value = "timetable.command.duration", extraTags = {"command", "reject"})
+  @Retryable(retryFor = {org.springframework.dao.TransientDataAccessException.class, org.springframework.dao.CannotAcquireLockException.class}, maxAttempts = 3, backoff = @Backoff(delay = 100, multiplier = 2.0, maxDelay = 1000))
   @Transactional
   public void handle(RejectCommand cmd) {
     var timetable = load(cmd.timetableId());
@@ -125,6 +138,8 @@ public class TimetableCommandHandler {
 
   // ── Emergency activate ──────────────────────────────────────────────────────
 
+  @Timed(value = "timetable.command.duration", extraTags = {"command", "emergency-activate"})
+  @Retryable(retryFor = {org.springframework.dao.TransientDataAccessException.class, org.springframework.dao.CannotAcquireLockException.class}, maxAttempts = 3, backoff = @Backoff(delay = 100, multiplier = 2.0, maxDelay = 1000))
   @Transactional
   public void handle(EmergencyActivateCommand cmd) {
     var timetable = load(cmd.timetableId());
@@ -138,6 +153,8 @@ public class TimetableCommandHandler {
 
   // ── Request changes ─────────────────────────────────────────────────────────
 
+  @Timed(value = "timetable.command.duration", extraTags = {"command", "request-changes"})
+  @Retryable(retryFor = {org.springframework.dao.TransientDataAccessException.class, org.springframework.dao.CannotAcquireLockException.class}, maxAttempts = 3, backoff = @Backoff(delay = 100, multiplier = 2.0, maxDelay = 1000))
   @Transactional
   public void handle(RequestChangesCommand cmd) {
     var timetable = load(cmd.timetableId());

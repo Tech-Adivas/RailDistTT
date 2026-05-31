@@ -6,6 +6,8 @@ import com.railway.platform.events.Topics;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.cloud.client.circuitbreaker.CircuitBreaker;
+import org.springframework.cloud.client.circuitbreaker.CircuitBreakerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 
@@ -19,6 +21,9 @@ import org.springframework.stereotype.Component;
  *
  * <p>The timetableId is used as the Kafka message key so all schedule events for the same
  * timetable land on the same partition, preserving ordering.
+ *
+ * <p>A Resilience4j circuit breaker wraps the Kafka send call to prevent cascading failures
+ * when the Kafka cluster is unavailable or slow.
  */
 @Component
 public class ScheduleComputedProducer {
@@ -26,9 +31,12 @@ public class ScheduleComputedProducer {
   private static final Logger log = LoggerFactory.getLogger(ScheduleComputedProducer.class);
 
   private final KafkaTemplate<String, Object> kafkaTemplate;
+  private final CircuitBreakerFactory<?, ?> circuitBreakerFactory;
 
-  public ScheduleComputedProducer(KafkaTemplate<String, Object> kafkaTemplate) {
+  public ScheduleComputedProducer(KafkaTemplate<String, Object> kafkaTemplate,
+      CircuitBreakerFactory<?, ?> circuitBreakerFactory) {
     this.kafkaTemplate = kafkaTemplate;
+    this.circuitBreakerFactory = circuitBreakerFactory;
   }
 
   /**
@@ -48,11 +56,24 @@ public class ScheduleComputedProducer {
     // Propagate correlation ID as a Kafka header so downstream consumers restore it into MDC.
     KafkaCorrelationIdPropagator.injectIntoHeaders(record.headers());
 
-    kafkaTemplate.send(record);
+    CircuitBreaker cb = circuitBreakerFactory.create("kafka-schedule-producer");
+    cb.run(() -> { kafkaTemplate.send(record); return null; },
+        throwable -> {
+          log.error("Kafka producer circuit open [producer=schedule] [error={}]",
+              throwable.getMessage());
+          throw new KafkaProducerCircuitOpenException("Schedule Kafka circuit open", throwable);
+        });
 
     log.info("Published ScheduleComputedEvent [timetableId={}] [eventId={}] [correlationId={}]",
         event.getTimetableId(),
         event.getMetadata().getEventId(),
         correlationId);
+  }
+
+  /** Thrown when the Kafka producer circuit breaker is open for the schedule producer. */
+  static class KafkaProducerCircuitOpenException extends RuntimeException {
+    KafkaProducerCircuitOpenException(String message, Throwable cause) {
+      super(message, cause);
+    }
   }
 }

@@ -5,6 +5,9 @@ import com.railway.platform.events.NotificationRequestEvent;
 import com.railway.platform.notification.infrastructure.persistence.entity.SentNotificationEntity;
 import com.railway.platform.notification.infrastructure.persistence.repository.SentNotificationRepository;
 import com.railway.platform.notification.provider.NotificationProvider;
+import io.micrometer.core.annotation.Timed;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -29,16 +32,22 @@ public class NotificationDeliveryService {
   private final Map<NotificationChannel, NotificationProvider> providers;
   private final SentNotificationRepository sentNotificationRepository;
   private final TemplateRenderer templateRenderer;
+  private final Counter deliveryCounter;
+  private final Counter errorCounter;
 
   public NotificationDeliveryService(
       Map<NotificationChannel, NotificationProvider> providers,
       SentNotificationRepository sentNotificationRepository,
-      TemplateRenderer templateRenderer) {
+      TemplateRenderer templateRenderer,
+      MeterRegistry meterRegistry) {
     this.providers = providers;
     this.sentNotificationRepository = sentNotificationRepository;
     this.templateRenderer = templateRenderer;
+    this.deliveryCounter = meterRegistry.counter("notification.deliveries.total");
+    this.errorCounter = meterRegistry.counter("notification.delivery.errors.total");
   }
 
+  @Timed(value = "notification.delivery.duration", description = "Time to deliver notification across all channels")
   public void deliver(NotificationRequestEvent event, String correlationId) {
     String eventId = event.getMetadata().getEventId().toString();
     boolean isEmergency = event.getIsEmergency();
@@ -68,9 +77,11 @@ public class NotificationDeliveryService {
 
       try {
         provider.send(recipientIds, renderedTitle, renderedBody, isEmergency, correlationId);
+        deliveryCounter.increment();
         recordDelivery(eventId, recipientIds, channel, event, renderedTitle, renderedBody,
             isEmergency, correlationId);
       } catch (Exception e) {
+        errorCounter.increment();
         log.error("Delivery failed [channel={}] [eventId={}]: {}", channel, eventId, e.getMessage());
         // Continue delivering to other channels — partial delivery is better than none.
       }

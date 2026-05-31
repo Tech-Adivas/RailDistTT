@@ -5,6 +5,7 @@ import com.railway.platform.events.ScheduledService;
 import com.railway.platform.events.StopTime;
 import com.railway.platform.events.EventMetadata;
 import com.railway.platform.events.TimetableChangedEvent;
+import io.micrometer.core.annotation.Timed;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -45,6 +46,7 @@ public class ScheduleComputationService {
    * @param correlationId Correlation ID propagated from the Kafka record header.
    * @return A fully populated ScheduleComputedEvent ready to publish to Kafka.
    */
+  @Timed(value = "schedule.computation.duration", description = "Time to compute effective schedule from timetable change")
   public ScheduleComputedEvent compute(TimetableChangedEvent event, String correlationId) {
     log.info("Computing schedule [timetableId={}] [changeType={}] [correlationId={}]",
         event.getTimetableId(), event.getChangeType(), correlationId);

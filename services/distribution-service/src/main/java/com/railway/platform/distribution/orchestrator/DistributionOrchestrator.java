@@ -10,6 +10,9 @@ import com.railway.platform.distribution.producer.DistributionEventProducer;
 import com.railway.platform.events.DistributionChannel;
 import com.railway.platform.events.DistributionStatus;
 import com.railway.platform.events.ScheduleComputedEvent;
+import io.micrometer.core.annotation.Timed;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -47,6 +50,7 @@ public class DistributionOrchestrator {
   private final PartnerFeedDistributor partnerFeedDistributor;
   private final DistributionEventProducer distributionEventProducer;
   private final DistributionTrackingRepository trackingRepository;
+  private final Counter failureCounter;
 
   public DistributionOrchestrator(
       WebSocketDistributor webSocketDistributor,
@@ -54,19 +58,22 @@ public class DistributionOrchestrator {
       StationDisplayDistributor stationDisplayDistributor,
       PartnerFeedDistributor partnerFeedDistributor,
       DistributionEventProducer distributionEventProducer,
-      DistributionTrackingRepository trackingRepository) {
+      DistributionTrackingRepository trackingRepository,
+      MeterRegistry meterRegistry) {
     this.webSocketDistributor = webSocketDistributor;
     this.passengerAppDistributor = passengerAppDistributor;
     this.stationDisplayDistributor = stationDisplayDistributor;
     this.partnerFeedDistributor = partnerFeedDistributor;
     this.distributionEventProducer = distributionEventProducer;
     this.trackingRepository = trackingRepository;
+    this.failureCounter = meterRegistry.counter("distribution.channel.failures.total");
   }
 
   /**
    * Distributes the schedule update to all channels and records per-channel results.
    * Called within a Kafka transaction so all DistributionEvent publishes and DB writes are atomic.
    */
+  @Timed(value = "distribution.orchestration.duration", description = "Time to fan-out schedule update to all channels")
   public void distribute(ScheduleComputedEvent event, String correlationId) {
     String timetableId = event.getTimetableId().toString();
     String scheduleEventId = event.getMetadata().getEventId().toString();
@@ -93,6 +100,10 @@ public class DistributionOrchestrator {
     for (var result : results) {
       var channel = DistributionChannel.valueOf(result.channel());
       var status = result.success() ? DistributionStatus.PUBLISHED : DistributionStatus.FAILED;
+
+      if (!result.success()) {
+        failureCounter.increment();
+      }
 
       distributionEventProducer.publish(
           scheduleEventId, timetableId, channel, status,

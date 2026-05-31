@@ -73,6 +73,13 @@ public class KafkaConsumerConfig {
     props.put(ProducerConfig.TRANSACTIONAL_ID_CONFIG, transactionIdPrefix);
     props.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true);
     props.put(ProducerConfig.ACKS_CONFIG, "all");
+    props.put(ProducerConfig.RETRIES_CONFIG, 10);
+    props.put(ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION, 1);
+    props.put(ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG, 30_000);
+    props.put(ProducerConfig.DELIVERY_TIMEOUT_MS_CONFIG, 120_000);
+    props.put(ProducerConfig.LINGER_MS_CONFIG, 5);
+    props.put(ProducerConfig.BATCH_SIZE_CONFIG, 65_536);
+    props.put(ProducerConfig.COMPRESSION_TYPE_CONFIG, "snappy");
     return new DefaultKafkaProducerFactory<>(props);
   }
 
@@ -105,6 +112,7 @@ public class KafkaConsumerConfig {
     factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL_IMMEDIATE);
     factory.getContainerProperties().setTransactionManager(kafkaTransactionManager());
     factory.setCommonErrorHandler(errorHandler());
+    factory.setConcurrency(3);
     return factory;
   }
 
@@ -127,6 +135,7 @@ public class KafkaConsumerConfig {
     factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL_IMMEDIATE);
     factory.getContainerProperties().setTransactionManager(kafkaTransactionManager());
     factory.setCommonErrorHandler(errorHandler());
+    factory.setConcurrency(3);
     return factory;
   }
 
@@ -174,6 +183,10 @@ public class KafkaConsumerConfig {
     props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
     props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
     props.put("schema.registry.url", schemaRegistryUrl);
+    props.put(ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG, 30_000);
+    props.put(ConsumerConfig.HEARTBEAT_INTERVAL_MS_CONFIG, 10_000);
+    props.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, 50);
+    props.put(ConsumerConfig.MAX_POLL_INTERVAL_MS_CONFIG, 300_000);
     return props;
   }
 }
