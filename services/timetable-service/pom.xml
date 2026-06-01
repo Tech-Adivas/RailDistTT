@@ -120,6 +120,17 @@
       <version>2.8.9</version>
     </dependency>
 
+    <!-- OpenTelemetry distributed tracing — exports spans to Grafana Alloy via OTLP -->
+    <!-- Versions managed by Spring Boot 4.x BOM -->
+    <dependency>
+      <groupId>io.micrometer</groupId>
+      <artifactId>micrometer-tracing-bridge-otel</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.opentelemetry</groupId>
+      <artifactId>opentelemetry-exporter-otlp</artifactId>
+    </dependency>
+
     <!-- Test dependencies -->
     <dependency>
       <groupId>org.springframework.boot</groupId>

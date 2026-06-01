@@ -1,0 +1,62 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "query-service.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "query-service.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "query-service.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow scraping from Prometheus (port 8090)
+    - ports:
+        - port: 8090
+          protocol: TCP
+    # Allow traffic from api-gateway within the same namespace
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace }}
+      ports:
+        - port: {{ .Values.service.port }}
+          protocol: TCP
+  egress:
+    # DNS resolution
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    # PostgreSQL / RDS
+    - ports:
+        - port: 5432
+          protocol: TCP
+    # Kafka / MSK (PLAINTEXT and SASL_SSL)
+    - ports:
+        - port: 9092
+          protocol: TCP
+        - port: 9096
+          protocol: TCP
+    # Redis / ElastiCache
+    - ports:
+        - port: 6379
+          protocol: TCP
+    # HashiCorp Vault
+    - ports:
+        - port: 8200
+          protocol: TCP
+    # OpenTelemetry collector (Grafana Alloy)
+    - ports:
+        - port: 4317
+          protocol: TCP
+        - port: 4318
+          protocol: TCP
+    # Kubernetes API server (for health checks, readiness)
+    - ports:
+        - port: 443
+          protocol: TCP

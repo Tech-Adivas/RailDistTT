@@ -121,3 +121,45 @@ spring:
 
   flyway:
     enabled: true
+
+---
+# Kubernetes profile — active when SPRING_PROFILES_ACTIVE=k8s (set by Helm configmap).
+# Vault Agent Sidecar writes secrets to /vault/secrets/application.properties.
+# Spring Boot loads it via SPRING_CONFIG_IMPORT env var (set in Helm deployment.yaml).
+spring:
+  config:
+    activate:
+      on-profile: k8s
+  cloud:
+    vault:
+      # Disable direct Vault connection; Vault Agent Sidecar handles secret injection.
+      enabled: false
+
+management:
+  server:
+    port: 8090
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: always
+  endpoints:
+    web:
+      exposure:
+        include: health,readiness,liveness,prometheus,info,metrics
+  metrics:
+    tags:
+      service: notification-service
+      environment: k8s
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      # TODO(config): Update namespace if Grafana Alloy is not in 'monitoring' namespace.
+      endpoint: http://alloy.monitoring.svc.cluster.local:4318/v1/traces
+
+logging:
+  structured:
+    format:
+      console: ecs   # Elastic Common Schema JSON — native in Spring Boot 4.x

@@ -1,0 +1,57 @@
+# Dependabot configuration — automated dependency security updates.
+# PRs are created weekly for each ecosystem.
+version: 2
+
+updates:
+  # Maven — all Java services and shared modules
+  - package-ecosystem: maven
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "java"
+    commit-message:
+      prefix: "chore(deps)"
+    ignore:
+      # Spring Boot BOM manages these transitively — only update via spring-boot.version
+      - dependency-name: "org.springframework.boot:*"
+        update-types: ["version-update:semver-minor", "version-update:semver-patch"]
+      - dependency-name: "org.springframework.cloud:*"
+        update-types: ["version-update:semver-minor", "version-update:semver-patch"]
+
+  # npm — Angular operator console
+  - package-ecosystem: npm
+    directory: "/frontend/operator-console"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "frontend"
+    commit-message:
+      prefix: "chore(deps)"
+    ignore:
+      # Major Angular/NgRx upgrades require manual testing
+      - dependency-name: "@angular/*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@ngrx/*"
+        update-types: ["version-update:semver-major"]
+
+  # GitHub Actions — CI/CD workflow dependencies
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+    labels:
+      - "dependencies"
+      - "ci"
+    commit-message:
+      prefix: "chore(ci)"

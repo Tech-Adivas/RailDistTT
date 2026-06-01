@@ -1,17 +1,55 @@
+# Production overrides for api-gateway Helm chart.
+# Applied with: helm upgrade --install api-gateway infra/helm/api-gateway \
+#   -f infra/helm/api-gateway/values.yaml \
+#   -f infra/helm/api-gateway/values-prod.yaml
+
 replicaCount: 3
+
+image:
+  pullPolicy: Always
 
 resources:
   requests:
     cpu: "500m"
-    memory: "1Gi"
+    memory: "768Mi"
   limits:
     cpu: "2000m"
-    memory: "2Gi"
+    memory: "1536Mi"
 
 hpa:
   minReplicas: 3
   maxReplicas: 20
+  targetCPUUtilizationPercentage: 60
 
+livenessProbe:
+  httpGet:
+    path: /actuator/health/liveness
+    port: 8090
+  initialDelaySeconds: 90
+  periodSeconds: 30
+  failureThreshold: 3
+  timeoutSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /actuator/health/readiness
+    port: 8090
+  initialDelaySeconds: 45
+  periodSeconds: 10
+  failureThreshold: 5
+  timeoutSeconds: 10
+
+# Vault config — agent role for production Kubernetes auth
+vault:
+  role: "railway-api-gateway"
+  secretPath: "secret/data/railway/api-gateway"
+
+# Gateway-specific rate limiter tuning for production load
+env:
+  SPRING_PROFILES_ACTIVE: "k8s"
+  JAVA_OPTS: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
+
+# Pod anti-affinity: required in prod (pods MUST be on different nodes)
 affinity:
   podAntiAffinity:
     requiredDuringSchedulingIgnoredDuringExecution:
@@ -19,3 +57,7 @@ affinity:
           matchLabels:
             app.kubernetes.io/name: api-gateway
         topologyKey: kubernetes.io/hostname
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2

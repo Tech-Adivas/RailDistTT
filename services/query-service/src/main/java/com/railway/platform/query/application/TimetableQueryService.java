@@ -1,6 +1,7 @@
 package com.railway.platform.query.application;
 
 import com.railway.platform.common.error.ErrorCodes;
+import com.railway.platform.query.api.dto.PagedResponse;
 import com.railway.platform.query.api.dto.TimetableView;
 import com.railway.platform.query.infrastructure.cache.TimetableCacheService;
 import com.railway.platform.query.infrastructure.persistence.repository.TimetableReadModelRepository;
@@ -72,5 +73,14 @@ public class TimetableQueryService {
         : repository.findByLineIdOrderByEffectiveDateDesc(lineId);
 
     return entities.stream().map(TimetableView::from).toList();
+  }
+
+  public PagedResponse<TimetableView> listByLine(String lineId, String status, int page, int size) {
+    var all = listByLine(lineId, status);
+    long total = all.size();
+    int fromIndex = Math.min(page * size, all.size());
+    int toIndex = Math.min(fromIndex + size, all.size());
+    var pageContent = all.subList(fromIndex, toIndex);
+    return PagedResponse.of(pageContent, page, size, total);
   }
 }

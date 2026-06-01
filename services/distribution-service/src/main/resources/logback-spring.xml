@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration scan="true" scanPeriod="30 seconds">
+
+  <!-- Import Spring Boot defaults (log levels, base appenders) -->
+  <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+
+  <!-- ── Plain-text console for local / dev / test ──────────────────────── -->
+  <springProfile name="!k8s">
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+      <encoder>
+        <pattern>%d{HH:mm:ss.SSS} %-5level [%X{traceId:-},%X{spanId:-}] [%X{correlationId:-}] %logger{36} - %msg%n</pattern>
+        <charset>UTF-8</charset>
+      </encoder>
+    </appender>
+    <root level="INFO">
+      <appender-ref ref="CONSOLE"/>
+    </root>
+  </springProfile>
+
+  <!-- ── JSON console for Kubernetes (k8s profile) ──────────────────────── -->
+  <!-- Spring Boot 4.x structured logging: ECS JSON format, no extra library -->
+  <springProfile name="k8s">
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+      <encoder class="org.springframework.boot.logging.logback.StructuredLogEncoder">
+        <format>ecs</format>
+      </encoder>
+    </appender>
+    <root level="INFO">
+      <appender-ref ref="CONSOLE"/>
+    </root>
+  </springProfile>
+
+  <!-- Reduce framework noise in all profiles -->
+  <logger name="org.hibernate.SQL" level="WARN"/>
+  <logger name="org.hibernate.orm.jdbc.bind" level="WARN"/>
+  <logger name="org.apache.kafka.clients" level="WARN"/>
+  <logger name="org.apache.kafka.common.utils" level="WARN"/>
+  <logger name="org.springframework.web.servlet.DispatcherServlet" level="WARN"/>
+  <logger name="org.springframework.security" level="WARN"/>
+  <logger name="io.debezium" level="INFO"/>
+
+</configuration>
