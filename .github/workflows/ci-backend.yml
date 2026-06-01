@@ -1,0 +1,120 @@
+name: CI — Backend Services
+
+on:
+  push:
+    paths:
+      - 'services/**'
+      - 'shared/**'
+      - 'pom.xml'
+      - '.github/workflows/ci-backend.yml'
+  pull_request:
+    paths:
+      - 'services/**'
+      - 'shared/**'
+      - 'pom.xml'
+
+jobs:
+  build:
+    name: Build & Test — ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - timetable-service
+          - schedule-service
+          - query-service
+          - distribution-service
+          - notification-service
+          - api-gateway
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Build shared libs and service
+        run: mvn -B -pl services/${{ matrix.service }} -am clean verify
+        # -pl: only build the target module
+        # -am: also build upstream dependencies (shared/common-lib, shared/events)
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports-${{ matrix.service }}
+          path: services/${{ matrix.service }}/target/surefire-reports/
+          retention-days: 7
+
+  docker-build:
+    name: Docker Build — ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: timetable-service
+            port: 8081
+          - service: schedule-service
+            port: 8082
+          - service: query-service
+            port: 8083
+          - service: distribution-service
+            port: 8084
+          - service: notification-service
+            port: 8085
+          - service: api-gateway
+            port: 8080
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Build fat JAR
+        run: mvn -B -pl services/${{ matrix.service }} -am clean package -DskipTests
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          # TODO(config): Set AWS_ACCESS_KEY_ID in GitHub repo secrets → Settings → Secrets and variables → Actions.
+          # Use an IAM user or role with AmazonEC2ContainerRegistryPowerUser policy (ECR push permissions).
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          # TODO(config): Set AWS_SECRET_ACCESS_KEY in GitHub repo secrets → Settings → Secrets and variables → Actions.
+          # Corresponds to the IAM user whose access key is AWS_ACCESS_KEY_ID.
+          aws-region: ${{ secrets.AWS_REGION }}
+          # TODO(config): Set AWS_REGION in GitHub repo secrets (e.g. eu-west-2 or us-east-1).
+          # Must match the region where your ECR repositories are provisioned.
+
+      - name: Log in to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push Docker image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          # TODO(config): ECR registry URL is auto-resolved from the AWS credentials above.
+          # Ensure each ECR repository (railway-platform/<service>) is pre-created (e.g. via Terraform).
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build \
+            -t $ECR_REGISTRY/railway-platform/${{ matrix.service }}:$IMAGE_TAG \
+            -t $ECR_REGISTRY/railway-platform/${{ matrix.service }}:latest \
+            -f services/${{ matrix.service }}/Dockerfile \
+            .
+          docker push $ECR_REGISTRY/railway-platform/${{ matrix.service }}:$IMAGE_TAG
+          docker push $ECR_REGISTRY/railway-platform/${{ matrix.service }}:latest
+          echo "image=$ECR_REGISTRY/railway-platform/${{ matrix.service }}:$IMAGE_TAG" >> $GITHUB_OUTPUT

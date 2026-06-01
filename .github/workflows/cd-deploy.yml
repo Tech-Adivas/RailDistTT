@@ -1,0 +1,227 @@
+name: CD — Deploy to EKS
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'services/**'
+      - 'shared/**'
+      - 'frontend/**'
+      - 'pom.xml'
+      - '.github/workflows/cd-deploy.yml'
+
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment to deploy to'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - prod
+
+# Prevent concurrent deployments to the same environment to avoid race conditions
+concurrency:
+  group: deploy-${{ github.event.inputs.environment || 'dev' }}
+  cancel-in-progress: false
+
+env:
+  # Resolved environment: manual dispatch uses the input; push to main defaults to 'dev'
+  TARGET_ENV: ${{ github.event.inputs.environment || 'dev' }}
+
+jobs:
+  deploy:
+    name: Deploy to EKS (${{ github.event.inputs.environment || 'dev' }})
+    runs-on: ubuntu-latest
+    # Protect production deployments with a GitHub Environment that requires approval
+    environment: ${{ github.event.inputs.environment || 'dev' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # -----------------------------------------------------------------------
+      # AWS + Kubernetes access
+      # -----------------------------------------------------------------------
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          # TODO(config): Set AWS_ACCESS_KEY_ID in GitHub repo/environment secrets.
+          # Use an IAM role with permissions: AmazonEKSClusterPolicy, ECR read.
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          # TODO(config): Set AWS_SECRET_ACCESS_KEY in GitHub repo/environment secrets.
+          aws-region: ${{ secrets.AWS_REGION }}
+          # TODO(config): Set AWS_REGION in GitHub repo secrets (e.g. eu-west-2).
+          # Must match the region where the EKS cluster and ECR repos are provisioned.
+
+      - name: Log in to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: 'v1.30.0'
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: 'v3.15.0'
+
+      - name: Update kubeconfig for EKS cluster
+        run: |
+          aws eks update-kubeconfig \
+            --region ${{ secrets.AWS_REGION }} \
+            --name ${{ secrets.EKS_CLUSTER_NAME }}
+          # TODO(config): Set EKS_CLUSTER_NAME in GitHub repo/environment secrets.
+          # Value is the EKS cluster name as shown in the AWS Console or Terraform output.
+
+      # -----------------------------------------------------------------------
+      # Helm chart values common to all deploys
+      # -----------------------------------------------------------------------
+      - name: Set shared deploy variables
+        id: vars
+        run: |
+          echo "image_tag=${{ github.sha }}" >> $GITHUB_OUTPUT
+          echo "ecr_registry=${{ steps.login-ecr.outputs.registry }}" >> $GITHUB_OUTPUT
+          echo "namespace=railway-platform-${{ env.TARGET_ENV }}" >> $GITHUB_OUTPUT
+
+      # -----------------------------------------------------------------------
+      # Deploy services sequentially so partial failures are immediately visible
+      # -----------------------------------------------------------------------
+      - name: Deploy — timetable-service
+        run: |
+          helm upgrade --install timetable-service ./infra/helm/timetable-service \
+            --namespace ${{ steps.vars.outputs.namespace }} \
+            --create-namespace \
+            --set image.repository=${{ steps.vars.outputs.ecr_registry }}/railway-platform/timetable-service \
+            --set image.tag=${{ steps.vars.outputs.image_tag }} \
+            --set environment=${{ env.TARGET_ENV }} \
+            --atomic \
+            --timeout 5m \
+            --wait
+
+      - name: Deploy — schedule-service
+        run: |
+          helm upgrade --install schedule-service ./infra/helm/schedule-service \
+            --namespace ${{ steps.vars.outputs.namespace }} \
+            --create-namespace \
+            --set image.repository=${{ steps.vars.outputs.ecr_registry }}/railway-platform/schedule-service \
+            --set image.tag=${{ steps.vars.outputs.image_tag }} \
+            --set environment=${{ env.TARGET_ENV }} \
+            --atomic \
+            --timeout 5m \
+            --wait
+
+      - name: Deploy — query-service
+        run: |
+          helm upgrade --install query-service ./infra/helm/query-service \
+            --namespace ${{ steps.vars.outputs.namespace }} \
+            --create-namespace \
+            --set image.repository=${{ steps.vars.outputs.ecr_registry }}/railway-platform/query-service \
+            --set image.tag=${{ steps.vars.outputs.image_tag }} \
+            --set environment=${{ env.TARGET_ENV }} \
+            --atomic \
+            --timeout 5m \
+            --wait
+
+      - name: Deploy — distribution-service
+        run: |
+          helm upgrade --install distribution-service ./infra/helm/distribution-service \
+            --namespace ${{ steps.vars.outputs.namespace }} \
+            --create-namespace \
+            --set image.repository=${{ steps.vars.outputs.ecr_registry }}/railway-platform/distribution-service \
+            --set image.tag=${{ steps.vars.outputs.image_tag }} \
+            --set environment=${{ env.TARGET_ENV }} \
+            --atomic \
+            --timeout 5m \
+            --wait
+
+      - name: Deploy — notification-service
+        run: |
+          helm upgrade --install notification-service ./infra/helm/notification-service \
+            --namespace ${{ steps.vars.outputs.namespace }} \
+            --create-namespace \
+            --set image.repository=${{ steps.vars.outputs.ecr_registry }}/railway-platform/notification-service \
+            --set image.tag=${{ steps.vars.outputs.image_tag }} \
+            --set environment=${{ env.TARGET_ENV }} \
+            --atomic \
+            --timeout 5m \
+            --wait
+
+      - name: Deploy — api-gateway
+        run: |
+          helm upgrade --install api-gateway ./infra/helm/api-gateway \
+            --namespace ${{ steps.vars.outputs.namespace }} \
+            --create-namespace \
+            --set image.repository=${{ steps.vars.outputs.ecr_registry }}/railway-platform/api-gateway \
+            --set image.tag=${{ steps.vars.outputs.image_tag }} \
+            --set environment=${{ env.TARGET_ENV }} \
+            --atomic \
+            --timeout 5m \
+            --wait
+
+      - name: Deploy — operator-console (frontend)
+        run: |
+          helm upgrade --install operator-console ./infra/helm/operator-console \
+            --namespace ${{ steps.vars.outputs.namespace }} \
+            --create-namespace \
+            --set image.repository=${{ steps.vars.outputs.ecr_registry }}/railway-platform/operator-console \
+            --set image.tag=${{ steps.vars.outputs.image_tag }} \
+            --set environment=${{ env.TARGET_ENV }} \
+            --atomic \
+            --timeout 5m \
+            --wait
+
+      # -----------------------------------------------------------------------
+      # Slack notification
+      # -----------------------------------------------------------------------
+      - name: Notify Slack — success
+        if: success()
+        uses: slackapi/slack-github-action@v2
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          # TODO(config): Set SLACK_WEBHOOK_URL in GitHub repo/environment secrets.
+          # Create an Incoming Webhook in your Slack workspace (api.slack.com/apps)
+          # and paste the URL here. Scope it to the #deployments channel.
+          webhook-type: incoming-webhook
+          payload: |
+            {
+              "text": ":white_check_mark: *Railway Platform* deployed to *${{ env.TARGET_ENV }}* successfully.",
+              "attachments": [
+                {
+                  "color": "good",
+                  "fields": [
+                    { "title": "Environment", "value": "${{ env.TARGET_ENV }}", "short": true },
+                    { "title": "Image tag", "value": "${{ github.sha }}", "short": true },
+                    { "title": "Triggered by", "value": "${{ github.actor }}", "short": true },
+                    { "title": "Workflow run", "value": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}", "short": false }
+                  ]
+                }
+              ]
+            }
+
+      - name: Notify Slack — failure
+        if: failure()
+        uses: slackapi/slack-github-action@v2
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          # TODO(config): Same SLACK_WEBHOOK_URL as success step above.
+          webhook-type: incoming-webhook
+          payload: |
+            {
+              "text": ":x: *Railway Platform* deployment to *${{ env.TARGET_ENV }}* FAILED.",
+              "attachments": [
+                {
+                  "color": "danger",
+                  "fields": [
+                    { "title": "Environment", "value": "${{ env.TARGET_ENV }}", "short": true },
+                    { "title": "Image tag", "value": "${{ github.sha }}", "short": true },
+                    { "title": "Triggered by", "value": "${{ github.actor }}", "short": true },
+                    { "title": "Workflow run", "value": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}", "short": false }
+                  ]
+                }
+              ]
+            }

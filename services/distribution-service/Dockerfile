@@ -11,19 +11,19 @@ WORKDIR /workspace
 COPY pom.xml .
 COPY shared/common-lib/pom.xml shared/common-lib/pom.xml
 COPY shared/events/pom.xml shared/events/pom.xml
-COPY services/timetable-service/pom.xml services/timetable-service/pom.xml
+COPY services/distribution-service/pom.xml services/distribution-service/pom.xml
 
 # Resolve all dependencies into the local Maven cache.
 # Only re-runs when a POM changes (layer cache miss).
-RUN mvn -B -pl services/timetable-service -am dependency:go-offline -q
+RUN mvn -B -pl services/distribution-service -am dependency:go-offline -q
 
 # Copy source code for shared libs and the target service.
 COPY shared/ shared/
-COPY services/timetable-service/ services/timetable-service/
+COPY services/distribution-service/ services/distribution-service/
 
 # Build the fat JAR. Tests are skipped here because they run in the CI
 # build job (ci-backend.yml) before this Dockerfile is invoked.
-RUN mvn -B -pl services/timetable-service -am clean package -DskipTests
+RUN mvn -B -pl services/distribution-service -am clean package -DskipTests
 
 # =============================================================================
 # Stage 2: Runtime
@@ -38,7 +38,7 @@ RUN addgroup -S railway && adduser -S railway -G railway
 USER railway
 
 # Copy only the executable fat JAR from the builder stage.
-COPY --from=builder /workspace/services/timetable-service/target/timetable-service-*.jar app.jar
+COPY --from=builder /workspace/services/distribution-service/target/distribution-service-*.jar app.jar
 
 # JVM tuning flags:
 #   -XX:+UseContainerSupport        honour cgroup memory/CPU limits (default on JDK 11+, explicit here for clarity)
@@ -48,7 +48,7 @@ COPY --from=builder /workspace/services/timetable-service/target/timetable-servi
 ENV JAVA_OPTS="-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:+UseG1GC -Djava.security.egd=file:/dev/./urandom"
 
 # Application port
-EXPOSE 8081
+EXPOSE 8084
 # Spring Boot Actuator / management port
 EXPOSE 8090
 

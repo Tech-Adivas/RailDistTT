@@ -1,0 +1,91 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "timetable-service.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "timetable-service.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "timetable-service.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "timetable-service.selectorLabels" . | nindent 8 }}
+      annotations:
+        {{- toYaml .Values.podAnnotations | nindent 8 }}
+        # Vault Agent Sidecar Injector — injects secrets as a file mounted at /vault/secrets/
+        # TODO(config): Ensure the Vault Agent Injector is installed (helm install vault hashicorp/vault).
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/role: {{ .Values.vault.role | quote }}
+        vault.hashicorp.com/agent-inject-secret-application.properties: {{ .Values.vault.secretPath | quote }}
+        vault.hashicorp.com/agent-inject-template-application.properties: |
+          {{`{{- with secret "`}}{{ .Values.vault.secretPath }}{{`" -}}`}}
+          spring.datasource.url={{ `{{ .Data.data.db_url }}` }}
+          spring.datasource.username={{ `{{ .Data.data.db_username }}` }}
+          spring.datasource.password={{ `{{ .Data.data.db_password }}` }}
+          spring.kafka.bootstrap-servers={{ `{{ .Data.data.kafka_bootstrap_servers }}` }}
+          spring.security.oauth2.resourceserver.jwt.issuer-uri={{ `{{ .Data.data.oidc_issuer_uri }}` }}
+          {{`{{- end }}`}}
+    spec:
+      serviceAccountName: {{ include "timetable-service.serviceAccountName" . }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+            - name: management
+              containerPort: {{ .Values.service.managementPort }}
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "timetable-service.fullname" . }}-config
+          env:
+            # Vault agent writes secrets to /vault/secrets/application.properties;
+            # Spring Boot reads it via spring.config.import
+            - name: SPRING_CONFIG_IMPORT
+              value: "file:/vault/secrets/application.properties"
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: vault-secrets
+              mountPath: /vault/secrets
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: vault-secrets
+          emptyDir:
+            medium: Memory
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

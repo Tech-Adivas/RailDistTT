@@ -1,0 +1,88 @@
+name: CI — Frontend
+
+on:
+  push:
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/ci-frontend.yml'
+  pull_request:
+    paths:
+      - 'frontend/**'
+
+jobs:
+  build-and-test:
+    name: Angular Build & Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend/operator-console
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/operator-console/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+        continue-on-error: true  # ESLint warnings don't block merge; errors do
+
+      - name: Build (production)
+        run: npm run build:prod
+
+      - name: Test (headless)
+        run: npm test -- --no-watch --browsers=ChromeHeadless
+
+      - name: Upload build artifact
+        if: github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: operator-console-dist
+          path: frontend/operator-console/dist/
+          retention-days: 7
+
+  docker-build:
+    name: Docker Build — operator-console
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          # TODO(config): Set AWS_ACCESS_KEY_ID in GitHub repo secrets → Settings → Secrets and variables → Actions.
+          # Use an IAM user or role with AmazonEC2ContainerRegistryPowerUser policy (ECR push permissions).
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          # TODO(config): Set AWS_SECRET_ACCESS_KEY in GitHub repo secrets → Settings → Secrets and variables → Actions.
+          aws-region: ${{ secrets.AWS_REGION }}
+          # TODO(config): Set AWS_REGION in GitHub repo secrets (e.g. eu-west-2 or us-east-1).
+
+      - name: Log in to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          # TODO(config): ECR registry URL is auto-resolved from the AWS credentials above.
+          # Ensure the ECR repository railway-platform/operator-console is pre-created (e.g. via Terraform).
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build \
+            -t $ECR_REGISTRY/railway-platform/operator-console:$IMAGE_TAG \
+            -t $ECR_REGISTRY/railway-platform/operator-console:latest \
+            -f frontend/operator-console/Dockerfile \
+            frontend/operator-console/
+          docker push $ECR_REGISTRY/railway-platform/operator-console:$IMAGE_TAG
+          docker push $ECR_REGISTRY/railway-platform/operator-console:latest

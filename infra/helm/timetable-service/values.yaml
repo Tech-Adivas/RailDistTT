@@ -1,0 +1,83 @@
+replicaCount: 2
+
+image:
+  # TODO(config): Replace with your ECR registry URL (output of Terraform ecr module).
+  repository: "PLACEHOLDER_ECR_REGISTRY/railway-platform/timetable-service"
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+serviceAccount:
+  create: true
+  # TODO(config): Set to the IAM role ARN created by Terraform for this service (IRSA).
+  roleArn: "PLACEHOLDER_IAM_ROLE_ARN_TIMETABLE_SERVICE"
+
+service:
+  type: ClusterIP
+  port: 8081
+  managementPort: 8090
+
+resources:
+  requests:
+    cpu: "250m"
+    memory: "512Mi"
+  limits:
+    cpu: "1000m"
+    memory: "1Gi"
+
+hpa:
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+livenessProbe:
+  httpGet:
+    path: /actuator/health/liveness
+    port: 8090
+  initialDelaySeconds: 60
+  periodSeconds: 30
+  failureThreshold: 3
+  timeoutSeconds: 5
+
+readinessProbe:
+  httpGet:
+    path: /actuator/health/readiness
+    port: 8090
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  failureThreshold: 3
+  timeoutSeconds: 5
+
+env:
+  SPRING_PROFILES_ACTIVE: "k8s"
+  # JVM container-aware memory
+  JAVA_OPTS: "-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:+UseG1GC"
+
+# Vault Agent Sidecar Injector annotations
+vault:
+  role: "railway-timetable-service"
+  # TODO(config): Vault path for this service's secrets. Configure in Vault at this path.
+  secretPath: "secret/data/railway/timetable-service"
+  # The rendered secrets file is mounted at /vault/secrets/application.properties
+  # Spring Boot reads it via spring.config.import=file:/vault/secrets/application.properties
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/path: "/actuator/prometheus"
+  prometheus.io/port: "8090"
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+nodeSelector: {}
+tolerations: []
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: timetable-service
+          topologyKey: kubernetes.io/hostname

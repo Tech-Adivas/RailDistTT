@@ -1,0 +1,162 @@
+name: Security Scanning
+
+on:
+  schedule:
+    # Weekly on Sunday at 02:00 UTC
+    - cron: '0 2 * * 0'
+  pull_request:
+    paths:
+      - 'services/**'
+      - 'shared/**'
+      - 'frontend/**'
+      - 'pom.xml'
+      - '.github/workflows/security-scan.yml'
+  # Allow manual trigger for ad-hoc scans
+  workflow_dispatch:
+
+# Required for uploading SARIF results to GitHub Security tab
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Job 1: OWASP Dependency Check — Maven project
+  # ---------------------------------------------------------------------------
+  owasp-dependency-check:
+    name: OWASP Dependency Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Build project (compile only, no tests)
+        run: mvn -B clean compile -DskipTests -q
+
+      - name: Run OWASP Dependency Check
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: 'railway-platform'
+          path: '.'
+          format: 'SARIF'
+          out: 'dependency-check-report'
+          # Fail the build if any dependency has a CVSS score >= 7 (high/critical)
+          args: >-
+            --failOnCVSS 7
+            --enableRetired
+            --nvdApiKey ${{ secrets.NVD_API_KEY }}
+          # TODO(config): Set NVD_API_KEY in GitHub repo secrets → Settings → Secrets and variables → Actions.
+          # Obtain a free API key from https://nvd.nist.gov/developers/request-an-api-key
+          # to avoid NVD rate-limiting during dependency checks.
+
+      - name: Upload SARIF to GitHub Security tab
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: dependency-check-report/dependency-check-report.sarif
+
+      - name: Upload full HTML report as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: owasp-dependency-check-report
+          path: dependency-check-report/
+          retention-days: 30
+
+  # ---------------------------------------------------------------------------
+  # Job 2: Trivy — Docker image scan from ECR (push to main only)
+  # ---------------------------------------------------------------------------
+  trivy-image-scan:
+    name: Trivy Image Scan — ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    # Only scan images after they have been pushed to ECR on main
+    if: github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - timetable-service
+          - schedule-service
+          - query-service
+          - distribution-service
+          - notification-service
+          - api-gateway
+          - operator-console
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          # TODO(config): Set AWS_ACCESS_KEY_ID in GitHub repo secrets.
+          # Needs AmazonEC2ContainerRegistryReadOnly policy to pull images for scanning.
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          # TODO(config): Set AWS_SECRET_ACCESS_KEY in GitHub repo secrets.
+          aws-region: ${{ secrets.AWS_REGION }}
+          # TODO(config): Set AWS_REGION in GitHub repo secrets (e.g. eu-west-2).
+
+      - name: Log in to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Run Trivy vulnerability scan on ECR image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: '${{ steps.login-ecr.outputs.registry }}/railway-platform/${{ matrix.service }}:latest'
+          # TODO(config): ECR registry is resolved from AWS credentials above.
+          # Images must already be pushed (by ci-backend.yml / ci-frontend.yml) before this job runs.
+          format: 'sarif'
+          output: 'trivy-${{ matrix.service }}.sarif'
+          # Fail on HIGH and CRITICAL CVEs; ignore UNKNOWN/LOW/MEDIUM
+          severity: 'HIGH,CRITICAL'
+          ignore-unfixed: true
+
+      - name: Upload Trivy SARIF to GitHub Security tab
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-${{ matrix.service }}.sarif'
+          category: 'trivy-${{ matrix.service }}'
+
+  # ---------------------------------------------------------------------------
+  # Job 3: Secret scanning with TruffleHog (filesystem mode)
+  # ---------------------------------------------------------------------------
+  trufflehog-secret-scan:
+    name: TruffleHog Secret Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Fetch full history so TruffleHog can scan all commits, not just HEAD
+          fetch-depth: 0
+
+      - name: Run TruffleHog (filesystem scan)
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          # Scan all commits from the beginning of the branch to HEAD
+          base: ${{ github.event.repository.default_branch }}
+          head: HEAD
+          extra_args: >-
+            --only-verified
+            --sarif-file trufflehog-results.sarif
+          # --only-verified: report only secrets that TruffleHog can confirm are valid credentials
+          # Remove --only-verified to catch all potential secrets (increases false positives)
+
+      - name: Upload TruffleHog SARIF to GitHub Security tab
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trufflehog-results.sarif
+          category: 'trufflehog'
