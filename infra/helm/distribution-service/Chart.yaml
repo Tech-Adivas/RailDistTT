@@ -1,0 +1,11 @@
+apiVersion: v2
+name: distribution-service
+description: Railway Timetable Distribution Platform — Distribution Service
+type: application
+version: 1.0.0
+appVersion: "1.0.0-SNAPSHOT"
+keywords:
+  - railway
+  - distribution
+  - spring-boot
+home: https://github.com/tech-adivas/raildisttt
