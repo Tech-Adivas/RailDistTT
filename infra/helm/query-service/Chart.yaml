@@ -1,0 +1,11 @@
+apiVersion: v2
+name: query-service
+description: Railway Timetable Distribution Platform — Query Service
+type: application
+version: 1.0.0
+appVersion: "1.0.0-SNAPSHOT"
+keywords:
+  - railway
+  - query
+  - spring-boot
+home: https://github.com/tech-adivas/raildisttt

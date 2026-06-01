@@ -1,0 +1,21 @@
+replicaCount: 3
+
+resources:
+  requests:
+    cpu: "500m"
+    memory: "1Gi"
+  limits:
+    cpu: "2000m"
+    memory: "2Gi"
+
+hpa:
+  minReplicas: 3
+  maxReplicas: 20
+
+affinity:
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: query-service
+        topologyKey: kubernetes.io/hostname
