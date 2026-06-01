@@ -33,7 +33,7 @@
     "@types/sockjs-client": "^1.5.4",
     "@types/uuid": "^10.0.0",
     "angular-eslint": "^19.0.0",
-    "jasmine-core": "~5.4.0",
+    "jasmine-core": "~6.2.0",
     "karma": "~6.4.0",
     "karma-chrome-launcher": "~3.2.0",
     "karma-coverage": "~2.2.0",
