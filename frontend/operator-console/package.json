@@ -29,7 +29,7 @@
     "@angular-devkit/build-angular": "^21.0.0",
     "@angular/cli": "^21.0.0",
     "@angular/compiler-cli": "^21.0.0",
-    "@types/jasmine": "~5.1.0",
+    "@types/jasmine": "~6.0.0",
     "@types/sockjs-client": "^1.5.4",
     "@types/uuid": "^10.0.0",
     "angular-eslint": "^19.0.0",
