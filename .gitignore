@@ -32,7 +32,7 @@ npm-debug.log*
 # Docker
 .docker/
 
-# Terraform state — contains sensitive data
+# Terraform state and local variable files — contain sensitive data
 *.tfstate
 *.tfstate.*
 .terraform/
@@ -41,6 +41,9 @@ override.tf
 override.tf.json
 *_override.tf
 *_override.tf.json
+# terraform.tfvars holds real secrets — NEVER commit; use terraform.tfvars.example instead
+terraform.tfvars
+*.auto.tfvars
 
 # OS / IDE
 .DS_Store

@@ -59,14 +59,14 @@ flowchart TD
 | Phase | Scope | Status |
 |-------|-------|--------|
 | 0 | Foundations (repo, common-lib, events, docker-compose) | ✅ |
-| 1 | Timetable Service (write core, outbox, approval, audit) | ⬜ |
-| 2 | Kafka backbone + Schedule Service | ⬜ |
-| 3 | Query Service (CQRS read side + projector) | ⬜ |
-| 4 | Distribution + Notification Services | ⬜ |
-| 5 | API Gateway | ⬜ |
-| 6 | Frontend (Angular 21 operator console) | ⬜ |
-| 7 | CI/CD, IaC, Observability | ⬜ |
-| 8 | Hardening & docs | ⬜ |
+| 1 | Timetable Service (write core, outbox, approval, audit) | ✅ |
+| 2 | Kafka backbone + Schedule Service | ✅ |
+| 3 | Query Service (CQRS read side + projector) | ✅ |
+| 4 | Distribution + Notification Services | ✅ |
+| 5 | API Gateway (OIDC JWT, RBAC, rate limiting, circuit breaker) | ✅ |
+| 6 | Frontend (Angular 21 operator console) | ✅ |
+| 7 | CI/CD, IaC (Terraform + Helm), Observability dashboards | ✅ |
+| 8 | Production hardening, runbooks, ADRs, onboarding docs | ✅ |
 
 ## One-Command Local Bring-Up
 
