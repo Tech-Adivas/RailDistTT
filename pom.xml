@@ -48,7 +48,7 @@
 
     <!-- Testing -->
     <testcontainers.version>1.21.0</testcontainers.version>
-    <pact-jvm.version>4.6.17</pact-jvm.version>
+    <pact-jvm.version>4.7.1</pact-jvm.version>
     <archunit.version>1.4.0</archunit.version>
 
     <!-- Code quality -->
