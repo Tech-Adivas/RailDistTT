@@ -58,7 +58,7 @@
     <spotbugs.version>4.9.3</spotbugs.version>
     <jacoco.version>0.8.13</jacoco.version>
     <sonar.version>5.1.0.4751</sonar.version>
-    <owasp-dependency-check.version>12.1.3</owasp-dependency-check.version>
+    <owasp-dependency-check.version>12.2.2</owasp-dependency-check.version>
   </properties>
 
   <!-- Import Spring Boot and Spring Cloud BOMs for managed dependency versions. -->
