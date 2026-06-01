@@ -1,0 +1,11 @@
+apiVersion: v2
+name: api-gateway
+description: Railway Timetable Distribution Platform — API Gateway
+type: application
+version: 1.0.0
+appVersion: "1.0.0-SNAPSHOT"
+keywords:
+  - railway
+  - api-gateway
+  - spring-boot
+home: https://github.com/tech-adivas/raildisttt

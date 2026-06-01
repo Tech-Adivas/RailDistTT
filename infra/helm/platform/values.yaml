@@ -1,0 +1,48 @@
+global:
+  imageTag: "latest"
+  # TODO(config): Set to your ECR registry URL (Terraform output: ecr_registry_url).
+  ecrRegistry: "PLACEHOLDER_ECR_REGISTRY"
+
+# Per-service overrides.
+# Note: Helm does not evaluate Go templates in values files; image.repository is a literal string.
+# At deploy time, override these with:
+#   helm upgrade --install railway-platform ./platform \
+#     --set global.ecrRegistry=<YOUR_ECR_URL> \
+#     --set global.imageTag=<GIT_SHA>
+# The CI pipeline should pass these overrides so each subchart picks up the correct image.
+
+timetable-service:
+  image:
+    # TODO(config): Inject via Vault. Vault path: secret/data/railway/timetable-service/<key>
+    repository: "PLACEHOLDER_ECR_REGISTRY/railway-platform/timetable-service"
+    tag: "latest"
+
+schedule-service:
+  image:
+    # TODO(config): Inject via Vault. Vault path: secret/data/railway/schedule-service/<key>
+    repository: "PLACEHOLDER_ECR_REGISTRY/railway-platform/schedule-service"
+    tag: "latest"
+
+query-service:
+  image:
+    # TODO(config): Inject via Vault. Vault path: secret/data/railway/query-service/<key>
+    repository: "PLACEHOLDER_ECR_REGISTRY/railway-platform/query-service"
+    tag: "latest"
+
+distribution-service:
+  image:
+    # TODO(config): Inject via Vault. Vault path: secret/data/railway/distribution-service/<key>
+    repository: "PLACEHOLDER_ECR_REGISTRY/railway-platform/distribution-service"
+    tag: "latest"
+
+notification-service:
+  image:
+    # TODO(config): Inject via Vault. Vault path: secret/data/railway/notification-service/<key>
+    repository: "PLACEHOLDER_ECR_REGISTRY/railway-platform/notification-service"
+    tag: "latest"
+
+api-gateway:
+  image:
+    # TODO(config): Inject via Vault. Vault path: secret/data/railway/api-gateway/<key>
+    repository: "PLACEHOLDER_ECR_REGISTRY/railway-platform/api-gateway"
+    tag: "latest"

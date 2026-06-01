@@ -1,0 +1,35 @@
+# Copy this file to terraform.tfvars and fill in actual values.
+# terraform.tfvars is gitignored — NEVER commit it (it may contain region/account info).
+# IMPORTANT: Apply prod changes only from a CI/CD pipeline with peer review.
+#
+# Usage:
+#   cp terraform.tfvars.example terraform.tfvars
+#   # Edit terraform.tfvars with your values
+#   terraform init
+#   terraform plan -out=plan.tfplan
+#   # Review the plan carefully before applying
+#   terraform apply plan.tfplan
+
+aws_region  = "eu-west-2"   # TODO(config): Your AWS region (e.g. eu-west-2, us-east-1)
+environment = "prod"
+
+# TODO(config): List AZs available in your region.
+# Run: aws ec2 describe-availability-zones --region eu-west-2 --query 'AvailabilityZones[].ZoneName'
+availability_zones = ["eu-west-2a", "eu-west-2b", "eu-west-2c"]
+
+vpc_cidr             = "10.1.0.0/16"
+private_subnet_cidrs = ["10.1.0.0/19", "10.1.32.0/19", "10.1.64.0/19"]
+public_subnet_cidrs  = ["10.1.96.0/24", "10.1.97.0/24", "10.1.98.0/24"]
+
+eks_cluster_name = "railway-prod"
+
+rds_instance_class    = "db.r7g.large"
+rds_allocated_storage = 100
+
+msk_cluster_name           = "railway-prod-msk"
+msk_broker_instance_type   = "kafka.m5.large"
+msk_number_of_broker_nodes = 3
+
+elasticache_cluster_id         = "railway-prod-redis"
+elasticache_node_type          = "cache.r7g.large"
+elasticache_num_cache_clusters = 3

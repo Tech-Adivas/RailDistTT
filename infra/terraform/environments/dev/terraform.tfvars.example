@@ -1,0 +1,33 @@
+# Copy this file to terraform.tfvars and fill in actual values.
+# terraform.tfvars is gitignored — NEVER commit it (it may contain region/account info).
+#
+# Usage:
+#   cp terraform.tfvars.example terraform.tfvars
+#   # Edit terraform.tfvars with your values
+#   terraform init
+#   terraform plan -out=plan.tfplan
+#   terraform apply plan.tfplan
+
+aws_region  = "eu-west-2"   # TODO(config): Your AWS region (e.g. eu-west-2, us-east-1)
+environment = "dev"
+
+# TODO(config): List AZs available in your region.
+# Run: aws ec2 describe-availability-zones --region eu-west-2 --query 'AvailabilityZones[].ZoneName'
+availability_zones = ["eu-west-2a", "eu-west-2b", "eu-west-2c"]
+
+vpc_cidr             = "10.0.0.0/16"
+private_subnet_cidrs = ["10.0.0.0/19", "10.0.32.0/19", "10.0.64.0/19"]
+public_subnet_cidrs  = ["10.0.96.0/24", "10.0.97.0/24", "10.0.98.0/24"]
+
+eks_cluster_name = "railway-dev"
+
+rds_instance_class    = "db.t3.micro"
+rds_allocated_storage = 20
+
+msk_cluster_name           = "railway-dev-msk"
+msk_broker_instance_type   = "kafka.t3.small"
+msk_number_of_broker_nodes = 3
+
+elasticache_cluster_id         = "railway-dev-redis"
+elasticache_node_type          = "cache.t4g.micro"
+elasticache_num_cache_clusters = 2
