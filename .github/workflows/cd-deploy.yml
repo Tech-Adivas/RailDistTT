@@ -180,7 +180,7 @@ jobs:
       # -----------------------------------------------------------------------
       - name: Notify Slack — success
         if: success()
-        uses: slackapi/slack-github-action@v2
+        uses: slackapi/slack-github-action@v3
         with:
           webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
           # TODO(config): Set SLACK_WEBHOOK_URL in GitHub repo/environment secrets.
@@ -205,7 +205,7 @@ jobs:
 
       - name: Notify Slack — failure
         if: failure()
-        uses: slackapi/slack-github-action@v2
+        uses: slackapi/slack-github-action@v3
         with:
           webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
           # TODO(config): Same SLACK_WEBHOOK_URL as success step above.
