@@ -1,0 +1,25 @@
+# Kubernetes Service for the prediction-service.
+# Exposes port 8000 within the cluster for Prometheus scraping
+# and liveness/readiness probes.
+apiVersion: v1
+kind: Service
+metadata:
+  name: prediction-service
+  namespace: railway
+  labels:
+    app.kubernetes.io/name: prediction-service
+    app.kubernetes.io/component: ml-inference
+    app.kubernetes.io/part-of: rail-dist-tt
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8000"
+    prometheus.io/path: "/metrics"
+spec:
+  selector:
+    app.kubernetes.io/name: prediction-service
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+      protocol: TCP
+  type: ClusterIP

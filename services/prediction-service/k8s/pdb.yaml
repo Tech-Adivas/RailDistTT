@@ -1,0 +1,16 @@
+# PodDisruptionBudget ensures at least one prediction-service pod remains
+# available during voluntary disruptions (node drains, rolling upgrades).
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: prediction-service-pdb
+  namespace: railway
+  labels:
+    app.kubernetes.io/name: prediction-service
+    app.kubernetes.io/component: ml-inference
+    app.kubernetes.io/part-of: rail-dist-tt
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: prediction-service

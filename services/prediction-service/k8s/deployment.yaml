@@ -1,0 +1,132 @@
+# Deployment for the prediction-service.
+# Secrets are injected by the Vault Agent Sidecar Injector via annotations.
+# Image tag is replaced by CI/CD (cd-deploy.yml) with the git SHA.
+#
+# TODO(config): Replace PLACEHOLDER_ECR_REGISTRY with Terraform output: ecr_registry_url
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prediction-service
+  namespace: railway
+  labels:
+    app.kubernetes.io/name: prediction-service
+    app.kubernetes.io/component: ml-inference
+    app.kubernetes.io/part-of: rail-dist-tt
+    app.kubernetes.io/version: "latest"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: prediction-service
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: prediction-service
+        app.kubernetes.io/component: ml-inference
+        app.kubernetes.io/part-of: rail-dist-tt
+      annotations:
+        # Vault Agent Sidecar Injector annotations
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/role: "prediction-service"
+        # Kafka SASL credentials
+        vault.hashicorp.com/agent-inject-secret-kafka_sasl_username: "secret/data/railway/prediction-service/kafka_sasl_username"
+        vault.hashicorp.com/agent-inject-template-kafka_sasl_username: |
+          {{- with secret "secret/data/railway/prediction-service/kafka_sasl_username" -}}
+          {{ .Data.data.value }}
+          {{- end }}
+        vault.hashicorp.com/agent-inject-secret-kafka_sasl_password: "secret/data/railway/prediction-service/kafka_sasl_password"
+        vault.hashicorp.com/agent-inject-template-kafka_sasl_password: |
+          {{- with secret "secret/data/railway/prediction-service/kafka_sasl_password" -}}
+          {{ .Data.data.value }}
+          {{- end }}
+        # Redis password
+        vault.hashicorp.com/agent-inject-secret-redis_password: "secret/data/railway/prediction-service/redis_password"
+        vault.hashicorp.com/agent-inject-template-redis_password: |
+          {{- with secret "secret/data/railway/prediction-service/redis_password" -}}
+          {{ .Data.data.value }}
+          {{- end }}
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: prediction-service
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: prediction-service
+          # TODO(config): Replace PLACEHOLDER_ECR_REGISTRY with Terraform output: ecr_registry_url
+          image: "PLACEHOLDER_ECR_REGISTRY/prediction-service:latest"
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: prediction-service-config
+          env:
+            # Secrets injected by Vault Agent as environment variables
+            - name: KAFKA_SASL_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: prediction-service-vault-secrets
+                  key: kafka_sasl_username
+                  optional: true
+            - name: KAFKA_SASL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: prediction-service-vault-secrets
+                  key: kafka_sasl_password
+                  optional: true
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: prediction-service-vault-secrets
+                  key: redis_password
+                  optional: true
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 20
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          lifecycle:
+            preStop:
+              exec:
+                # Allow in-flight messages to drain before the pod is terminated
+                command: ["/bin/sh", "-c", "sleep 5"]
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: prediction-service
+                topologyKey: kubernetes.io/hostname

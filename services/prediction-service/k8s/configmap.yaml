@@ -1,0 +1,65 @@
+# Non-secret configuration for the prediction-service.
+# All PLACEHOLDER_* values must be substituted at deploy time.
+# Secrets (Kafka password, Redis password, Vault token) are injected by the
+# Vault Agent Sidecar Injector and must NOT appear here.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prediction-service-config
+  namespace: railway
+  labels:
+    app.kubernetes.io/name: prediction-service
+    app.kubernetes.io/component: ml-inference
+    app.kubernetes.io/part-of: rail-dist-tt
+data:
+  # ---------------------------------------------------------------------------
+  # Kafka
+  # TODO(config): Terraform output: msk_bootstrap_brokers_sasl_scram
+  # ---------------------------------------------------------------------------
+  KAFKA_BOOTSTRAP_SERVERS: "PLACEHOLDER_MSK_BOOTSTRAP_SERVERS"
+
+  KAFKA_CONSUMER_GROUP: "railway.prediction-service"
+  KAFKA_TOPIC_SCHEDULE: "railway.schedule.computed"
+  KAFKA_TOPIC_TIMETABLE: "railway.timetable.changed"
+  KAFKA_TOPIC_PREDICTION: "railway.delay.prediction.computed"
+  KAFKA_TOPIC_DLQ: "railway.delay.prediction.dlq"
+
+  # ---------------------------------------------------------------------------
+  # Schema Registry
+  # TODO(config): Terraform output: schema_registry_url
+  # ---------------------------------------------------------------------------
+  SCHEMA_REGISTRY_URL: "PLACEHOLDER_SCHEMA_REGISTRY_URL"
+
+  # ---------------------------------------------------------------------------
+  # HashiCorp Vault
+  # TODO(config): Terraform output: vault_addr
+  # ---------------------------------------------------------------------------
+  VAULT_ADDR: "PLACEHOLDER_VAULT_ADDR"
+  VAULT_ROLE: "prediction-service"
+  VAULT_ENABLED: "true"
+
+  # ---------------------------------------------------------------------------
+  # MLflow
+  # TODO(config): Terraform output: mlflow_tracking_uri
+  # ---------------------------------------------------------------------------
+  MLFLOW_TRACKING_URI: "PLACEHOLDER_MLFLOW_TRACKING_URI"
+  MLFLOW_MODEL_NAME: "delay-predictor"
+  MLFLOW_MODEL_STAGE: "Production"
+  MLFLOW_ENABLED: "true"
+
+  # ---------------------------------------------------------------------------
+  # Redis (ElastiCache)
+  # TODO(config): Terraform output: redis_primary_endpoint
+  # ---------------------------------------------------------------------------
+  REDIS_HOST: "PLACEHOLDER_REDIS_PRIMARY_ENDPOINT"
+  REDIS_PORT: "6379"
+  REDIS_TTL_SECONDS: "86400"
+
+  # ---------------------------------------------------------------------------
+  # Application
+  # ---------------------------------------------------------------------------
+  LOG_LEVEL: "INFO"
+  PORT: "8000"
+  CIRCUIT_BREAKER_FAIL_MAX: "5"
+  CIRCUIT_BREAKER_RESET_TIMEOUT: "30"
+  KAFKA_PRODUCER_RETRY_ATTEMPTS: "3"
