@@ -1,10 +1,13 @@
 package com.railway.platform.timetable.api.rest;
 
+import com.railway.platform.timetable.api.dto.AuditLogEntry;
+import com.railway.platform.timetable.api.dto.PagedResponse;
 import com.railway.platform.timetable.api.dto.request.*;
 import com.railway.platform.timetable.api.dto.response.AuditLogEntryResponse;
 import com.railway.platform.timetable.api.dto.response.TimetableResponse;
 import com.railway.platform.timetable.application.command.*;
 import com.railway.platform.timetable.application.handler.TimetableCommandHandler;
+import com.railway.platform.timetable.application.service.TimetableAuditService;
 import com.railway.platform.timetable.domain.repository.TimetableRepository;
 import com.railway.platform.timetable.domain.valueobject.LineId;
 import com.railway.platform.timetable.domain.valueobject.TimetableId;
@@ -37,14 +40,17 @@ public class TimetableController {
   private final TimetableCommandHandler commandHandler;
   private final TimetableRepository repository;
   private final AuditLogJpaRepository auditLogRepository;
+  private final TimetableAuditService auditService;
 
   public TimetableController(
       TimetableCommandHandler commandHandler,
       TimetableRepository repository,
-      AuditLogJpaRepository auditLogRepository) {
+      AuditLogJpaRepository auditLogRepository,
+      TimetableAuditService auditService) {
     this.commandHandler = commandHandler;
     this.repository = repository;
     this.auditLogRepository = auditLogRepository;
+    this.auditService = auditService;
   }
 
   // ── Create ──────────────────────────────────────────────────────────────────
@@ -188,5 +194,22 @@ public class TimetableController {
         .map(AuditLogEntryResponse::from)
         .toList();
     return ResponseEntity.ok(entries);
+  }
+
+  /**
+   * Paginated audit trail for a timetable, including pagination metadata.
+   *
+   * <p>Access is granted to approvers and admins unconditionally, and to any authenticated
+   * author (TIMETABLE_AUTHOR) for full auditability of their own timetable lifecycle.
+   * Page size is server-capped at 100 regardless of the requested value.
+   */
+  @GetMapping("/{id}/audit")
+  @PreAuthorize("hasAnyRole('TIMETABLE_APPROVER', 'ADMIN', 'TIMETABLE_AUTHOR')")
+  public ResponseEntity<PagedResponse<AuditLogEntry>> getAuditHistory(
+      @PathVariable String id,
+      @RequestParam(defaultValue = "0") int page,
+      @RequestParam(defaultValue = "20") int size) {
+
+    return ResponseEntity.ok(auditService.getAuditHistory(id, page, size));
   }
 }

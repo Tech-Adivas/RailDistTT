@@ -64,6 +64,12 @@ public class TimetableRepositoryAdapter implements TimetableRepository {
         .stream().map(this::toDomain).toList();
   }
 
+  @Override
+  public List<Timetable> findByLineIdAndStatusIn(LineId lineId, List<TimetableStatus> statuses) {
+    return jpaRepository.findByLineIdAndStatusIn(lineId.value(), statuses)
+        .stream().map(this::toDomain).toList();
+  }
+
   // ── Mapping ───────────────────────────────────────────────────────────────
 
   private TimetableJpaEntity toEntity(Timetable t) {

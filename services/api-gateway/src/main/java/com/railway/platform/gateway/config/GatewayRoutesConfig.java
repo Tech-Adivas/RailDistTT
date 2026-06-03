@@ -90,6 +90,21 @@ public class GatewayRoutesConfig {
             .uri(timetableServiceUri))
 
         // ── Read routes → query-service ──────────────────────────────────
+        // Audit log read → timetable-service (write-side DB).
+        // Must precede the generic timetable-read route so audit requests do NOT get
+        // forwarded to query-service, which has no access to the write-side audit_log table.
+        .route("timetable-audit", r -> r
+            .path("/api/v1/timetables/*/audit")
+            .and().method(HttpMethod.GET)
+            .filters(f -> f
+                .circuitBreaker(c -> c
+                    .setName("timetable-service")
+                    .setFallbackUri("forward:/fallback/timetable-service"))
+                .requestRateLimiter(rl -> rl
+                    .setRateLimiter(rateLimiter)
+                    .setKeyResolver(keyResolver)))
+            .uri(timetableServiceUri))
+
         .route("timetable-read", r -> r
             .path("/api/v1/timetables/**")
             .and().method(HttpMethod.GET)

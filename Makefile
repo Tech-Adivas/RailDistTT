@@ -13,7 +13,7 @@ NG      := npx ng
 
 .PHONY: help up down clean dev test test-unit test-integration build \
         build-images push-images lint format vault-status kafka-topics \
-        schema-registry-subjects generate-events logs ps
+        schema-registry-subjects generate-events logs ps seed-data
 
 # ── Default target ──────────────────────────────────────────────────────────
 help:
@@ -32,6 +32,7 @@ help:
 	@echo "  make lint                Run lint + format checks"
 	@echo "  make format              Apply auto-formatting (Spotless + Prettier)"
 	@echo "  make generate-events     Re-generate Java POJOs from Avro schemas"
+	@echo "  make seed-data           Load sample data into all service databases (requires: make up)"
 	@echo "  make vault-status        Check Vault health"
 	@echo "  make kafka-topics        List Kafka topics"
 	@echo "  make logs                Follow logs for all infra containers"
@@ -122,6 +123,21 @@ test-integration:
 services/timetable-service,services/schedule-service,services/query-service,\
 services/distribution-service,services/notification-service,services/api-gateway \
 	-Dgroups=integration --also-make
+
+# ── Seed / sample data ───────────────────────────────────────────────────────
+
+seed-data: ## Load sample/seed data into all service databases (requires: make up)
+	@echo "Seeding timetable_db..."
+	docker compose exec -T postgres psql -U railway -d timetable_db < infra/postgres/seed/01-timetable-db.sql
+	@echo "Seeding schedule_db..."
+	docker compose exec -T postgres psql -U railway -d schedule_db < infra/postgres/seed/02-schedule-db.sql
+	@echo "Seeding query_db..."
+	docker compose exec -T postgres psql -U railway -d query_db < infra/postgres/seed/03-query-db.sql
+	@echo "Seeding distribution_db..."
+	docker compose exec -T postgres psql -U railway -d distribution_db < infra/postgres/seed/04-distribution-db.sql
+	@echo "Seeding notification_db..."
+	docker compose exec -T postgres psql -U railway -d notification_db < infra/postgres/seed/05-notification-db.sql
+	@echo "✓ All databases seeded with sample data."
 
 # ── Code quality ─────────────────────────────────────────────────────────────
 

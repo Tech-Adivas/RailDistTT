@@ -43,4 +43,13 @@ public interface TimetableRepository {
    * the system must handle overlap during activation to correctly supersede the old one).
    */
   List<Timetable> findActiveByLineId(LineId lineId);
+
+  /**
+   * Find all timetables for a line whose status is in the supplied set.
+   *
+   * <p>Used by the single-active-timetable conflict detection logic to locate any
+   * currently ACTIVE or EMERGENCY_ACTIVE timetable before activating a new one,
+   * so it can be atomically superseded within the same transaction.
+   */
+  List<Timetable> findByLineIdAndStatusIn(LineId lineId, List<TimetableStatus> statuses);
 }

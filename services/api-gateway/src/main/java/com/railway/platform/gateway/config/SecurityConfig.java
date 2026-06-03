@@ -98,6 +98,10 @@ public class SecurityConfig {
             .pathMatchers(HttpMethod.PATCH, "/api/v1/timetables/*")
                 .hasAnyRole("TIMETABLE_AUTHOR", "ADMIN")
 
+            // Audit log — approvers, admins, and authors may query audit history
+            .pathMatchers(HttpMethod.GET, "/api/v1/timetables/*/audit")
+                .hasAnyRole("TIMETABLE_APPROVER", "ADMIN", "TIMETABLE_AUTHOR")
+
             // All other API calls — authenticated only
             .pathMatchers("/api/**").authenticated()
 

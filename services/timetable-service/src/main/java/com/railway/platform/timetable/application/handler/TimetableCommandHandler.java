@@ -8,6 +8,7 @@ import com.railway.platform.timetable.domain.model.Timetable;
 import com.railway.platform.timetable.domain.repository.TimetableRepository;
 import com.railway.platform.timetable.domain.valueobject.LineId;
 import com.railway.platform.timetable.domain.valueobject.TimetableId;
+import com.railway.platform.timetable.domain.valueobject.TimetableStatus;
 import com.railway.platform.timetable.infrastructure.persistence.outbox.OutboxEventWriter;
 import com.railway.platform.timetable.infrastructure.persistence.outbox.AuditLogWriter;
 import io.micrometer.core.annotation.Timed;
@@ -143,6 +144,24 @@ public class TimetableCommandHandler {
   @Transactional
   public void handle(EmergencyActivateCommand cmd) {
     var timetable = load(cmd.timetableId());
+
+    // Single-active-timetable constraint: auto-supersede any currently active timetable
+    // for the same line before emergency-activating this one.
+    List<Timetable> activeTimetables = repository
+        .findByLineIdAndStatusIn(timetable.getLineId(),
+            List.of(TimetableStatus.ACTIVE, TimetableStatus.EMERGENCY_ACTIVE));
+    for (Timetable active : activeTimetables) {
+      if (!active.getId().equals(timetable.getId())) {
+        active.supersede(cmd.actor());
+        repository.save(active);
+        outboxEventWriter.write(active.getDomainEvents());
+        auditLogWriter.write(active.getDomainEvents(), cmd.actor());
+        active.clearDomainEvents();
+        log.info("Auto-superseded timetable [id={}] for line [{}] on emergency activation of [id={}]",
+            active.getId(), timetable.getLineId(), cmd.timetableId());
+      }
+    }
+
     timetable.activateEmergency(cmd.actor(), cmd.justification());
     persistWithOutboxAndAudit(timetable, cmd.actor());
     emergencyActivationCounter.increment();
