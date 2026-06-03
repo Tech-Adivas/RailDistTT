@@ -48,6 +48,17 @@ readinessProbe:
   failureThreshold: 3
   timeoutSeconds: 5
 
+startupProbe:
+  httpGet:
+    path: /actuator/health/liveness
+    port: 8090
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  failureThreshold: 30
+  timeoutSeconds: 5
+
+terminationGracePeriodSeconds: 60
+
 env:
   SPRING_PROFILES_ACTIVE: "k8s"
   # JVM container-aware memory

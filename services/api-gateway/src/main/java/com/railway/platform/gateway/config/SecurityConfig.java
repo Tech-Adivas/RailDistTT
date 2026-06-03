@@ -16,11 +16,17 @@ import org.springframework.security.oauth2.jwt.ReactiveJwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.ReactiveJwtAuthenticationConverterAdapter;
 import org.springframework.security.web.server.SecurityWebFilterChain;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.reactive.CorsConfigurationSource;
+import org.springframework.web.cors.reactive.UrlBasedCorsConfigurationSource;
 import reactor.core.publisher.Mono;
 
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.stream.Collectors;
+
+import static org.springframework.security.config.Customizer.withDefaults;
 
 /**
  * Reactive security configuration for the API Gateway.
@@ -48,10 +54,25 @@ public class SecurityConfig {
   @Value("${spring.security.oauth2.resourceserver.jwt.issuer-uri:PLACEHOLDER_OIDC_ISSUER_URI}")
   private String issuerUri;
 
+  @Value("${gateway.cors.allowed-origin-patterns:http://localhost:4200}")
+  private String[] allowedOriginPatterns;
+
   @Bean
   public SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http) {
     return http
         .csrf(ServerHttpSecurity.CsrfSpec::disable)
+        .cors(withDefaults())
+        .headers(headers -> headers
+            .hsts(hsts -> hsts
+                .maxAge(java.time.Duration.ofDays(365))
+                .includeSubdomains(true)
+                .preload(true))
+            .frameOptions(frame -> frame.mode(
+                org.springframework.security.web.server.header.XFrameOptionsServerHttpHeadersWriter.Mode.DENY))
+            .contentTypeOptions(withDefaults())
+            .xssProtection(withDefaults())
+            .referrerPolicy(referrer -> referrer.policy(
+                org.springframework.security.web.server.header.ReferrerPolicyServerHttpHeadersWriter.ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN)))
         .authorizeExchange(exchanges -> exchanges
             // Public — liveness/readiness probes, metrics scrape (network-restricted in prod)
             .pathMatchers("/actuator/health", "/actuator/info").permitAll()
@@ -99,6 +120,21 @@ public class SecurityConfig {
     // TODO(config): In production use NimbusReactiveJwtDecoder.withIssuerLocation(issuerUri).build()
     // For local dev, this uses the configured issuer-uri which must be reachable.
     return NimbusReactiveJwtDecoder.withIssuerLocation(issuerUri).build();
+  }
+
+  @Bean
+  public CorsConfigurationSource corsConfigurationSource() {
+    CorsConfiguration config = new CorsConfiguration();
+    config.setAllowedOriginPatterns(Arrays.asList(allowedOriginPatterns));
+    config.setAllowedMethods(Arrays.asList("GET", "POST", "PATCH", "DELETE", "OPTIONS"));
+    config.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "X-Correlation-Id"));
+    config.setExposedHeaders(List.of("X-Correlation-Id"));
+    config.setAllowCredentials(true);
+    config.setMaxAge(3600L);
+
+    UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+    source.registerCorsConfiguration("/**", config);
+    return source;
   }
 
   /**

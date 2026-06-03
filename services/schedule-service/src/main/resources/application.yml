@@ -105,6 +105,11 @@ logging:
 
 server:
   port: 8082
+  shutdown: graceful
+
+spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
 
 ---
 # DEV-ONLY profile — used when running locally via docker-compose

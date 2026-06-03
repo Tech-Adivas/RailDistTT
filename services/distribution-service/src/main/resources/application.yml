@@ -84,6 +84,11 @@ logging:
 
 server:
   port: 8084
+  shutdown: graceful
+
+spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
 
 ---
 # DEV-ONLY profile
