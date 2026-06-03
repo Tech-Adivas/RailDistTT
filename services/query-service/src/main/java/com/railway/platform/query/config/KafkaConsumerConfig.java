@@ -1,5 +1,6 @@
 package com.railway.platform.query.config;
 
+import com.railway.platform.events.DelayPredictionEvent;
 import com.railway.platform.events.ScheduleComputedEvent;
 import com.railway.platform.events.TimetableChangedEvent;
 import com.railway.platform.events.Topics;
@@ -117,6 +118,49 @@ public class KafkaConsumerConfig {
     factory.setCommonErrorHandler(errorHandler());
     factory.setConcurrency(3);
     return factory;
+  }
+
+  // ── Consumer: DelayPredictionEvent ──────────────────────────────────────────
+
+  /**
+   * Listener container factory for {@code railway.delay.prediction.computed}.
+   *
+   * <p>Routes unprocessable events to {@link Topics#DELAY_PREDICTION_DLQ} (a dedicated DLQ
+   * separate from the main {@code railway.dlq}) to allow targeted triage and retention.
+   * Retries use {@link ExponentialBackOff} with 100 ms base, factor 2.0, capped at 3 attempts.
+   */
+  @Bean
+  public ConcurrentKafkaListenerContainerFactory<String, DelayPredictionEvent>
+      delayPredictionListenerContainerFactory() {
+
+    var factory = new ConcurrentKafkaListenerContainerFactory<String, DelayPredictionEvent>();
+    factory.setConsumerFactory(
+        new DefaultKafkaConsumerFactory<>(baseConsumerProps(), new StringDeserializer(),
+            new KafkaAvroDeserializer()));
+    factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL_IMMEDIATE);
+    factory.setCommonErrorHandler(delayPredictionErrorHandler());
+    factory.setConcurrency(3);
+    return factory;
+  }
+
+  @Bean
+  public DefaultErrorHandler delayPredictionErrorHandler() {
+    var backOff = new ExponentialBackOff(100L, 2.0);
+    backOff.setMaxAttempts(3);
+
+    var recoverer = new DeadLetterPublishingRecoverer(dlqKafkaTemplate(),
+        (record, ex) -> {
+          log.error(
+              "Sending DelayPredictionEvent to DLQ [topic={}] [partition={}] [offset={}] [error={}]",
+              record.topic(), record.partition(), record.offset(), ex.getMessage());
+          return new org.apache.kafka.common.TopicPartition(Topics.DELAY_PREDICTION_DLQ, -1);
+        });
+
+    var handler = new DefaultErrorHandler(recoverer, backOff);
+    handler.addNotRetryableExceptions(
+        org.apache.kafka.common.errors.SerializationException.class,
+        IllegalArgumentException.class);
+    return handler;
   }
 
   // ── Error handling ───────────────────────────────────────────────────────────

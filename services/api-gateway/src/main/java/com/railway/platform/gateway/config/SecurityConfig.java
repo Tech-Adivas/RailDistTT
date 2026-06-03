@@ -102,6 +102,10 @@ public class SecurityConfig {
             .pathMatchers(HttpMethod.GET, "/api/v1/timetables/*/audit")
                 .hasAnyRole("TIMETABLE_APPROVER", "ADMIN", "TIMETABLE_AUTHOR")
 
+            // Delay predictions — any read role may query predictions
+            .pathMatchers(HttpMethod.GET, "/api/v1/predictions")
+                .hasAnyRole("READ_ONLY", "TIMETABLE_AUTHOR", "TIMETABLE_APPROVER", "ADMIN")
+
             // All other API calls — authenticated only
             .pathMatchers("/api/**").authenticated()
 

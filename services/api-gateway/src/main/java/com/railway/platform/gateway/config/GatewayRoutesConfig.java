@@ -141,6 +141,21 @@ public class GatewayRoutesConfig {
                     .setKeyResolver(keyResolver)))
             .uri(queryServiceUri))
 
+        // ── Delay predictions read → query-service ───────────────────────
+        // Must precede the query-service catch-all so /api/v1/predictions is
+        // explicitly routed and can carry its own circuit-breaker name.
+        .route("predictions-read", r -> r
+            .path("/api/v1/predictions")
+            .and().method(HttpMethod.GET)
+            .filters(f -> f
+                .circuitBreaker(c -> c
+                    .setName("query-service")
+                    .setFallbackUri("forward:/fallback/query-service"))
+                .requestRateLimiter(rl -> rl
+                    .setRateLimiter(rateLimiter)
+                    .setKeyResolver(keyResolver)))
+            .uri(queryServiceUri))
+
         // ── WebSocket upgrade → distribution-service ─────────────────────
         // No rate limiter on WS — long-lived connection; circuit breaker still applies.
         .route("websocket-distribution", r -> r

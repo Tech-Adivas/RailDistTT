@@ -267,8 +267,9 @@
         <configuration>
           <source>21</source>
           <target>21</target>
-          <!-- Enable preview features if needed; comment out if unused. -->
-          <!-- <compilerArgs><arg>--enable-preview</arg></compilerArgs> -->
+          <!-- Enable preview features if needed; comment out if unused.
+          <compilerArgs><arg>PREVIEW_ENABLE_FLAG</arg></compilerArgs>
+          -->
           <annotationProcessorPaths>
             <path>
               <groupId>org.projectlombok</groupId>

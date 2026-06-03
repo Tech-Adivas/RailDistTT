@@ -1,5 +1,6 @@
 package com.railway.platform.distribution.config;
 
+import com.railway.platform.events.DelayPredictionEvent;
 import com.railway.platform.events.ScheduleComputedEvent;
 import com.railway.platform.events.Topics;
 import io.confluent.kafka.serializers.KafkaAvroDeserializer;
@@ -114,6 +115,57 @@ public class KafkaConfig {
     factory.setCommonErrorHandler(errorHandler());
     factory.setConcurrency(3);
     return factory;
+  }
+
+  // ── Consumer: DelayPredictionEvent ──────────────────────────────────────────
+
+  /**
+   * Consumer factory for {@code railway.delay.prediction.computed}.
+   *
+   * <p>This factory does NOT attach a {@code KafkaTransactionManager} because
+   * {@link com.railway.platform.distribution.consumer.PredictionComputedConsumer} only
+   * performs WebSocket delivery (fire-and-forget) and a single DB write — no Kafka
+   * messages are produced within the consumer, so exactly-once is not required.
+   */
+  @Bean
+  public DefaultKafkaConsumerFactory<String, DelayPredictionEvent>
+      delayPredictionConsumerFactory() {
+    Map<String, Object> props = baseConsumerProps();
+    props.put(KafkaAvroDeserializerConfig.SPECIFIC_AVRO_READER_CONFIG, true);
+    return new DefaultKafkaConsumerFactory<>(props, new StringDeserializer(),
+        new KafkaAvroDeserializer());
+  }
+
+  @Bean
+  public ConcurrentKafkaListenerContainerFactory<String, DelayPredictionEvent>
+      delayPredictionListenerContainerFactory() {
+
+    var factory = new ConcurrentKafkaListenerContainerFactory<String, DelayPredictionEvent>();
+    factory.setConsumerFactory(delayPredictionConsumerFactory());
+    factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL_IMMEDIATE);
+    factory.setCommonErrorHandler(delayPredictionErrorHandler());
+    factory.setConcurrency(3);
+    return factory;
+  }
+
+  @Bean
+  public DefaultErrorHandler delayPredictionErrorHandler() {
+    var backOff = new ExponentialBackOff(100L, 2.0);
+    backOff.setMaxAttempts(3);
+
+    var recoverer = new DeadLetterPublishingRecoverer(kafkaTemplate(),
+        (record, ex) -> {
+          log.error(
+              "Sending DelayPredictionEvent to DLQ [topic={}] [partition={}] [offset={}] [error={}]",
+              record.topic(), record.partition(), record.offset(), ex.getMessage());
+          return new org.apache.kafka.common.TopicPartition(Topics.DELAY_PREDICTION_DLQ, -1);
+        });
+
+    var handler = new DefaultErrorHandler(recoverer, backOff);
+    handler.addNotRetryableExceptions(
+        org.apache.kafka.common.errors.SerializationException.class,
+        IllegalArgumentException.class);
+    return handler;
   }
 
   // ── Error handling ───────────────────────────────────────────────────────────

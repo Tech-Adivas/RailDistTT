@@ -1,0 +1,44 @@
+{
+  "namespace": "com.railway.platform.events",
+  "name": "DelayPredictionEvent",
+  "type": "record",
+  "doc": "Emitted by Python AI Prediction Service after computing a delay prediction from a ScheduleComputedEvent. Published to railway.delay.prediction.computed.",
+  "fields": [
+    {
+      "name": "metadata",
+      "type": "com.railway.platform.events.EventMetadata",
+      "doc": "Standard event metadata. correlationId inherited from the triggering ScheduleComputedEvent."
+    },
+    {
+      "name": "routeId",
+      "type": "string",
+      "doc": "Railway line identifier, e.g. LINE-VIC-BRI."
+    },
+    {
+      "name": "trainId",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Specific service ID if prediction is service-level. Null for line-level predictions."
+    },
+    {
+      "name": "predictedDelayMinutes",
+      "type": "int",
+      "doc": "Predicted delay in whole minutes. 0 means on time."
+    },
+    {
+      "name": "confidenceScore",
+      "type": "float",
+      "doc": "Model confidence in [0.0, 1.0]. 0.0 = no prediction available (fallback)."
+    },
+    {
+      "name": "modelVersion",
+      "type": "string",
+      "doc": "Semantic version of the ML model that produced this prediction."
+    },
+    {
+      "name": "triggeringScheduleEventId",
+      "type": "string",
+      "doc": "eventId of the ScheduleComputedEvent that triggered this prediction."
+    }
+  ]
+}
