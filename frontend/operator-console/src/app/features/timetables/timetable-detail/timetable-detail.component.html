@@ -85,6 +85,12 @@
       </div>
     </div>
 
+    <!-- Centre: AI delay prediction panel -->
+    <div class="card" style="flex:1">
+      <h3 class="font-semibold mb-3">Delay Prediction</h3>
+      <app-prediction-panel [routeId]="store.selected()!.lineId" />
+    </div>
+
     <!-- Right: action panel -->
     <div class="card" style="flex:1">
       <h3 class="font-semibold mb-3">Actions</h3>

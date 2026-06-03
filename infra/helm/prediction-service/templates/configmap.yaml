@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "prediction-service.fullname" . }}-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "prediction-service.labels" . | nindent 4 }}
+data:
+  KAFKA_TOPIC_SCHEDULE: {{ .Values.env.KAFKA_TOPIC_SCHEDULE | quote }}
+  KAFKA_TOPIC_PREDICTION: {{ .Values.env.KAFKA_TOPIC_PREDICTION | quote }}
+  KAFKA_TOPIC_DLQ: {{ .Values.env.KAFKA_TOPIC_DLQ | quote }}
+  KAFKA_CONSUMER_GROUP: {{ .Values.env.KAFKA_CONSUMER_GROUP | quote }}
+  LOG_LEVEL: {{ .Values.env.LOG_LEVEL | quote }}
+  MLFLOW_MODEL_NAME: {{ .Values.env.MLFLOW_MODEL_NAME | quote }}
+  MLFLOW_MODEL_STAGE: {{ .Values.env.MLFLOW_MODEL_STAGE | quote }}

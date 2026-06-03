@@ -1,0 +1,92 @@
+replicaCount: 2
+
+image:
+  # TODO(config): Replace with your ECR registry URL (output of Terraform ecr module).
+  repository: "PLACEHOLDER_ECR_REGISTRY/railway-platform/prediction-service"
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+serviceAccount:
+  create: true
+  # TODO(config): Set to the IAM role ARN created by Terraform for this service (IRSA).
+  roleArn: "PLACEHOLDER_IAM_ROLE_ARN_PREDICTION_SERVICE"
+
+service:
+  type: ClusterIP
+  port: 8000
+
+resources:
+  requests:
+    cpu: "500m"
+    memory: "1Gi"
+  limits:
+    cpu: "2000m"
+    memory: "2Gi"
+
+hpa:
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8000
+  initialDelaySeconds: 60
+  periodSeconds: 30
+  failureThreshold: 3
+  timeoutSeconds: 5
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 8000
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  failureThreshold: 3
+  timeoutSeconds: 5
+
+startupProbe:
+  httpGet:
+    path: /health
+    port: 8000
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  failureThreshold: 30
+  timeoutSeconds: 5
+
+terminationGracePeriodSeconds: 30
+
+env:
+  KAFKA_TOPIC_SCHEDULE: "railway.schedule.computed"
+  KAFKA_TOPIC_PREDICTION: "railway.delay.prediction.computed"
+  KAFKA_TOPIC_DLQ: "railway.delay.prediction.dlq"
+  KAFKA_CONSUMER_GROUP: "railway.prediction-service"
+  LOG_LEVEL: "INFO"
+  MLFLOW_MODEL_NAME: "delay-predictor"
+  MLFLOW_MODEL_STAGE: "Production"
+
+# Vault Agent Sidecar Injector annotations
+vault:
+  role: "railway-prediction-service"
+  # TODO(config): Vault path for this service's secrets. Configure in Vault at this path.
+  secretPath: "secret/data/railway/prediction-service"
+
+podAnnotations: {}
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+nodeSelector: {}
+tolerations: []
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: prediction-service
+          topologyKey: kubernetes.io/hostname

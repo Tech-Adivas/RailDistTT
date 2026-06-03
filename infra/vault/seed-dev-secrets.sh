@@ -68,6 +68,21 @@ vault kv put secret/data/railway/debezium \
   db-username="debezium_user" \
   db-password="debezium_dev_password"   # DEV-ONLY
 
+# ── Prediction Service ───────────────────────────────────────────────────────
+vault kv put secret/railway/prediction-service/kafka \
+  bootstrap_servers="kafka:9092" \
+  sasl_username="" \
+  sasl_password=""   # DEV-ONLY — SASL disabled in local dev
+
+vault kv put secret/railway/prediction-service/redis \
+  host="redis" \
+  password=""   # DEV-ONLY
+
+vault kv put secret/railway/prediction-service/mlflow \
+  tracking_uri="http://mlflow:5000" \
+  access_key="" \
+  secret_key=""   # DEV-ONLY
+
 echo ">> Vault seeding complete."
 echo "   Secrets are at: secret/data/railway/<service>"
 echo "   Access Vault UI at: http://localhost:8200 (token: dev-only-root-token)"

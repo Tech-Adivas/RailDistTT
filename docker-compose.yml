@@ -301,6 +301,42 @@ services:
     networks:
       - railway-net
 
+  # ─────────────────────────────────────────────────────────────────
+  # Python AI Prediction Service — delay prediction ML microservice.
+  # Consumes railway.schedule.computed, produces railway.delay.prediction.computed.
+  # ─────────────────────────────────────────────────────────────────
+  prediction-service:
+    build:
+      context: .
+      dockerfile: services/prediction-service/Dockerfile
+    container_name: railway-prediction-service
+    restart: unless-stopped
+    depends_on:
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      schema-registry:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
+      SCHEMA_REGISTRY_URL: "http://schema-registry:8081"
+      REDIS_HOST: "redis"
+      VAULT_ADDR: "http://vault:8200"
+      VAULT_ENABLED: "false"          # DEV-ONLY: disable Vault, use env vars directly
+      MLFLOW_ENABLED: "false"         # DEV-ONLY: use mock model
+      LOG_LEVEL: "INFO"
+    ports:
+      - "8086:8000"   # /health and /metrics accessible at localhost:8086
+    networks:
+      - railway-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
 # ─────────────────────────────────────────────────────────────────
 # Named volumes — data persists across container restarts.
 # Use `make clean` to wipe them.

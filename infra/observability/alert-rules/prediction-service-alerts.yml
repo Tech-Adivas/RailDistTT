@@ -1,0 +1,65 @@
+groups:
+  - name: prediction-service
+    interval: 30s
+    rules:
+      - alert: PredictionServiceDown
+        expr: absent(predictions_generated_total)
+        for: 2m
+        labels:
+          severity: critical
+          service: prediction-service
+        annotations:
+          summary: "Python AI Prediction Service is not generating predictions"
+          description: "No predictions_generated_total metric scraped for 2 minutes."
+
+      - alert: PredictionHighConsumerLag
+        expr: kafka_consumer_lag{job="prediction-service"} > 1000
+        for: 5m
+        labels:
+          severity: warning
+          service: prediction-service
+        annotations:
+          summary: "High consumer lag on prediction service"
+          description: "Consumer lag is {{ $value }} messages."
+
+      - alert: PredictionHighErrorRate
+        expr: >
+          rate(prediction_errors_total[5m]) /
+          (rate(predictions_generated_total[5m]) + 0.001) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          service: prediction-service
+        annotations:
+          summary: "High prediction error rate"
+          description: "Error rate is {{ $value | humanizePercentage }}."
+
+      - alert: PredictionDLQSpike
+        expr: rate(kafka_messages_published_total{topic="railway.delay.prediction.dlq"}[10m]) > 0.0083
+        for: 0m
+        labels:
+          severity: warning
+          service: prediction-service
+        annotations:
+          summary: "Prediction DLQ receiving messages"
+          description: "More than 5 messages in 10 minutes sent to DLQ."
+
+      - alert: PredictionCircuitBreakerOpen
+        expr: circuit_breaker_state{job="prediction-service"} == 1
+        for: 1m
+        labels:
+          severity: warning
+          service: prediction-service
+        annotations:
+          summary: "Prediction service circuit breaker is OPEN"
+          description: "Circuit breaker for {{ $labels.dependency }} has been OPEN for 1 minute."
+
+      - alert: PredictionModelNotLoaded
+        expr: model_version_info == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: prediction-service
+        annotations:
+          summary: "No ML model loaded in prediction service"
+          description: "model_version_info gauge is 0 — no model version is active."

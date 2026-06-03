@@ -82,6 +82,18 @@ export interface ScheduleUpdateMessage {
   isEmergency: boolean;
 }
 
+// ── Prediction ───────────────────────────────────────────────────────────────
+
+export interface PredictionMessage {
+  routeId: string;
+  trainId: string | null;
+  predictedDelayMinutes: number;
+  confidenceScore: number;
+  modelVersion: string;
+  predictedAt: string;
+  correlationId: string;
+}
+
 // ── Error ─────────────────────────────────────────────────────────────────────
 
 export interface ApiError {

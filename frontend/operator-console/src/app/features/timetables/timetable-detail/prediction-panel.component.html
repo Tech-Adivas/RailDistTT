@@ -1,0 +1,23 @@
+<div class="prediction-panel">
+  @if (loading()) {
+    <p class="prediction-loading">Loading prediction...</p>
+  } @else if (error()) {
+    <p class="prediction-error">{{ error() }}</p>
+  } @else if (latestPrediction()) {
+    <div class="prediction-card" [attr.data-colour]="delayColour()">
+      <span class="prediction-indicator" [attr.data-colour]="delayColour()"></span>
+      <div class="prediction-details">
+        <span class="prediction-delay">{{ delayLabel() }}</span>
+        @if (latestPrediction()!.confidenceScore > 0) {
+          <span class="prediction-confidence">
+            Confidence: {{ (latestPrediction()!.confidenceScore * 100).toFixed(0) }}%
+          </span>
+          <span class="prediction-model">Model: {{ latestPrediction()!.modelVersion }}</span>
+        }
+      </div>
+    </div>
+    <p class="prediction-disclaimer">AI-generated prediction. May not reflect actual delays.</p>
+  } @else {
+    <p class="prediction-empty">No prediction available for this route.</p>
+  }
+</div>

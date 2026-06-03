@@ -11,7 +11,7 @@ COMPOSE := docker compose
 MAVEN   := ./mvnw
 NG      := npx ng
 
-.PHONY: help up down clean dev test test-unit test-integration build \
+.PHONY: help up down clean dev test test-unit test-integration test-prediction build \
         build-images push-images lint format vault-status kafka-topics \
         schema-registry-subjects generate-events logs ps seed-data
 
@@ -20,13 +20,14 @@ help:
 	@echo ""
 	@echo "  Railway Timetable Distribution Platform"
 	@echo ""
-	@echo "  make up                  Start full infra stack (PG, Kafka, Redis, Vault, observability)"
+	@echo "  make up                  Start full infra stack (PG, Kafka, Redis, Vault, observability, prediction-service)"
 	@echo "  make down                Stop containers (volumes preserved)"
 	@echo "  make clean               Stop containers AND wipe volumes (destructive)"
 	@echo "  make dev                 Start all services in dev mode against local stack"
 	@echo "  make test                Run all unit + integration tests"
 	@echo "  make test-unit           Run unit tests only"
 	@echo "  make test-integration    Run integration tests (requires infra stack)"
+	@echo "  make test-prediction     Run Python prediction-service unit tests"
 	@echo "  make build               Build all Java services (skip tests)"
 	@echo "  make build-images        Build Docker images for all services"
 	@echo "  make lint                Run lint + format checks"
@@ -124,6 +125,9 @@ services/timetable-service,services/schedule-service,services/query-service,\
 services/distribution-service,services/notification-service,services/api-gateway \
 	-Dgroups=integration --also-make
 
+test-prediction:  ## Run Python prediction-service tests
+	cd services/prediction-service && pip install -q -r requirements-dev.txt && pytest tests/unit/ -v
+
 # ── Seed / sample data ───────────────────────────────────────────────────────
 
 seed-data: ## Load sample/seed data into all service databases (requires: make up)
@@ -170,7 +174,9 @@ dev: up
 	$(MAVEN) spring-boot:run -pl services/notification-service &
 	$(MAVEN) spring-boot:run -pl services/api-gateway &
 	cd frontend/operator-console && npm start &
+	$(COMPOSE) up -d prediction-service &
 	@echo ">> All services starting. API Gateway: http://localhost:8080"
+	@echo "   Prediction Service: http://localhost:8086"
 
 # ── Observability helpers ─────────────────────────────────────────────────────
 

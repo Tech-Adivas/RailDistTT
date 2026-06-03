@@ -6,11 +6,12 @@ import { AuthService } from '../../../core/auth/auth.service';
 import { StompService } from '../../../core/websocket/stomp.service';
 import { StatusBadgeComponent } from '../../../shared/components/status-badge/status-badge.component';
 import { ErrorBannerComponent } from '../../../shared/components/error-banner/error-banner.component';
+import { PredictionPanelComponent } from './prediction-panel.component';
 
 @Component({
   selector: 'app-timetable-detail',
   standalone: true,
-  imports: [StatusBadgeComponent, ErrorBannerComponent],
+  imports: [StatusBadgeComponent, ErrorBannerComponent, PredictionPanelComponent],
   templateUrl: './timetable-detail.component.html',
 })
 export class TimetableDetailComponent implements OnInit, OnDestroy {
