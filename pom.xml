@@ -47,7 +47,7 @@
     <flyway.version>11.9.0</flyway.version>
 
     <!-- Testing -->
-    <testcontainers.version>1.21.0</testcontainers.version>
+    <testcontainers.version>2.0.5</testcontainers.version>
     <pact-jvm.version>4.6.17</pact-jvm.version>
     <archunit.version>1.4.0</archunit.version>
 
