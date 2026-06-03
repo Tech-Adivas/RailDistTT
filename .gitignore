@@ -57,3 +57,6 @@ coverage/
 .nyc_output/
 surefire-reports/
 jacoco.exec
+
+# Claude Code internal directory (worktrees, session data)
+.claude/
